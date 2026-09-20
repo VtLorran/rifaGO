@@ -60,6 +60,7 @@ export function GradePontos({
   const [modalAberto, setModalAberto] = useState(false);
   const [nomeComprador, setNomeComprador] = useState("");
   const [telefoneComprador, setTelefoneComprador] = useState("");
+  const [cpfComprador, setCpfComprador] = useState("");
   const [indicadorSelecionado, setIndicadorSelecionado] = useState("");
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
@@ -171,6 +172,7 @@ export function GradePontos({
     setModalAberto(false);
     setNomeComprador("");
     setTelefoneComprador("");
+    setCpfComprador("");
     setIndicadorSelecionado("");
     setErro(null);
   };
@@ -184,6 +186,13 @@ export function GradePontos({
 
     if (!nomeComprador || !telefoneComprador) {
       setErro("Por favor, preencha o nome e o telefone do comprador.");
+      return;
+    }
+
+    const cpfLimpo = cpfComprador.replace(/\D/g, "");
+
+    if (modo === "cliente" && cpfLimpo.length !== 11) {
+      setErro("Por favor, informe um CPF válido (11 dígitos).");
       return;
     }
 
@@ -201,6 +210,7 @@ export function GradePontos({
             numeros_pontos: selecionados,
             nome_comprador: nomeComprador,
             telefone_comprador: telefoneComprador,
+            cpf_comprador: cpfLimpo,
             membro_indicador_id: membroIndicadorId || null,
           }),
         });
@@ -523,6 +533,30 @@ export function GradePontos({
                 />
               </div>
 
+              {modo === "cliente" && (
+                <div>
+                  <label className="block text-xs font-semibold text-neutral-700 mb-1">
+                    CPF
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={14}
+                    placeholder="000.000.000-00"
+                    value={cpfComprador}
+                    onChange={(e) => {
+                      const v = e.target.value.replace(/\D/g, "").slice(0, 11);
+                      const formatado = v
+                        .replace(/(\d{3})(\d)/, "$1.$2")
+                        .replace(/(\d{3})(\d)/, "$1.$2")
+                        .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
+                      setCpfComprador(formatado);
+                    }}
+                    className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm font-mono focus:outline-none focus:border-[#801818]"
+                  />
+                </div>
+              )}
+
               {isHost && (
                 <div>
                   <label className="block text-xs font-semibold text-neutral-700 mb-1 flex items-center gap-1">
@@ -687,6 +721,7 @@ export function GradePontos({
         aberto={modalPagamentoAberto}
         pontos={pontosReservados ?? []}
         compradorNome={nomeComprador}
+        compradorCpf={cpfComprador}
         compradorTelefone={telefoneComprador}
         onFechar={() => {
           setModalPagamentoAberto(false);
