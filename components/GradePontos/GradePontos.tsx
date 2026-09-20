@@ -66,7 +66,7 @@ export function GradePontos({
   const [erro, setErro] = useState<string | null>(null);
   const [sucesso, setSucesso] = useState<string | null>(null);
 
-  // Estado do Modal de Pagamento Pix (após reserva de pontos no modo cliente)
+  // Estado do Modal de Pagamento Pix
   const [pontosReservados, setPontosReservados] = useState<
     { id: number; numero_ponto: string }[] | null
   >(null);
@@ -93,7 +93,6 @@ export function GradePontos({
     setPontosOcupados(mapa);
   };
 
-  // Carrega os pontos ocupados do banco
   useEffect(() => {
     let ativo = true;
 
@@ -146,7 +145,6 @@ export function GradePontos({
     const ocupado = pontosOcupados[numero.toString()];
 
     if (ocupado) {
-      // No modo host, clicar num ponto ocupado abre a edição
       if (isHost) {
         abrirEdicaoPonto(ocupado);
       }
@@ -164,17 +162,22 @@ export function GradePontos({
     setPontoEditando(ponto);
     setEditNomeComprador(ponto.nome_comprador ?? "");
     setEditTelefoneComprador(ponto.telefone_comprador ?? "");
-    setEditIndicador(ponto.membro_indicador_id ? String(ponto.membro_indicador_id) : "");
+    setEditIndicador(
+      ponto.membro_indicador_id ? String(ponto.membro_indicador_id) : "",
+    );
     setEditErro(null);
   };
 
   const fecharModalRegistro = () => {
     setModalAberto(false);
+    setErro(null);
+  };
+
+  const limparFormularioComprador = () => {
     setNomeComprador("");
     setTelefoneComprador("");
     setCpfComprador("");
     setIndicadorSelecionado("");
-    setErro(null);
   };
 
   const valorTotal = selecionados.length * VALOR_POR_PONTO;
@@ -192,7 +195,7 @@ export function GradePontos({
     const cpfLimpo = cpfComprador.replace(/\D/g, "");
 
     if (modo === "cliente" && cpfLimpo.length !== 11) {
-      setErro("Por favor, informe um CPF válido (11 dígitos).");
+      setErro("Por favor, informe um CPF válido com 11 dígitos.");
       return;
     }
 
@@ -224,9 +227,10 @@ export function GradePontos({
             nome_comprador: nomeComprador,
             telefone_comprador: telefoneComprador,
             status_pago: true,
-            membro_indicador_id: isHost && indicadorSelecionado
-              ? Number(indicadorSelecionado)
-              : null,
+            membro_indicador_id:
+              isHost && indicadorSelecionado
+                ? Number(indicadorSelecionado)
+                : null,
           }),
         });
       }
@@ -239,17 +243,18 @@ export function GradePontos({
 
       if (modo === "cliente") {
         setPontosReservados(data.pontos);
+        fecharModalRegistro();
         setModalPagamentoAberto(true);
       } else {
         setSucesso(
           `Venda registrada para os pontos ${selecionados.join(", ")}!`,
         );
+        fecharModalRegistro();
+        limparFormularioComprador();
+        setSelecionados([]);
+        refrescarPontos();
+        onVendasAlteradas?.();
       }
-
-      setSelecionados([]);
-      fecharModalRegistro();
-      refrescarPontos();
-      onVendasAlteradas?.();
     } catch (err: unknown) {
       if (err instanceof Error) {
         setErro(err.message);
@@ -358,7 +363,7 @@ export function GradePontos({
       {/* Legenda dos Status */}
       <div className="flex flex-wrap items-center justify-center gap-4 mb-6 text-xs text-neutral-600">
         <div className="flex items-center gap-1.5">
-          <div className="w-3.5 h-3.5 rounded-full bg-white border border-neutral-300" />
+          <div className="w-3.5 h-3.5 rounded-full bg-[#801818]" />
           <span>Disponível</span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -391,7 +396,7 @@ export function GradePontos({
         </div>
       )}
 
-      {/* GRADE DOS 1080 PONTOS */}
+      {/* GRADE DOS PONTOS */}
       {carregandoPontos ? (
         <div className="flex flex-col items-center justify-center py-20 gap-3 text-neutral-500">
           <Loader2 className="w-8 h-8 animate-spin text-[#801818]" />
@@ -408,7 +413,11 @@ export function GradePontos({
                 key={numero}
                 onClick={() => togglePonto(numero)}
                 disabled={!!ocupado && !isHost}
-                title={ocupado && isHost ? "Clique para editar este ponto" : undefined}
+                title={
+                  ocupado && isHost
+                    ? "Clique para editar este ponto"
+                    : undefined
+                }
                 className={`
                   aspect-square rounded-full flex items-center justify-center text-xs font-bold transition-all transform active:scale-95 select-none
                   ${
@@ -418,7 +427,7 @@ export function GradePontos({
                         : "bg-neutral-200 text-neutral-400 border border-neutral-300 cursor-not-allowed line-through opacity-60"
                       : estaSelecionado
                         ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-105 border-2 border-emerald-400"
-                        : "bg-red-800 text-white font-bold hover:border-white hover:text-white shadow-sm"
+                        : "bg-[#801818] text-white font-bold hover:border-white hover:text-white shadow-sm"
                   }
                 `}
               >
@@ -429,17 +438,17 @@ export function GradePontos({
         </div>
       )}
 
-      {/* BARRA INFERIOR DE REGISTO (Visível quando há seleção) */}
+      {/* BARRA INFERIOR DE REGISTO */}
       {selecionados.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-xl bg-white text-black p-4 rounded-3xl shadow-2xl flex items-center justify-between z-40 border border-white/20 animate-slideUp">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[92%] max-w-xl bg-white text-black p-4 rounded-3xl shadow-2xl flex items-center justify-between z-40 border border-neutral-200 animate-slideUp">
           <div>
-            <span className="text-xs text-black font-semibold block">
+            <span className="text-xs text-neutral-600 font-semibold block">
               {selecionados.length}{" "}
               {selecionados.length === 1
                 ? "ponto selecionado"
                 : "pontos selecionados"}
             </span>
-            <span className="text-lg font-extrabold text-amber-600">
+            <span className="text-lg font-extrabold text-emerald-600">
               Total: R$ {valorTotal.toFixed(2).replace(".", ",")}
             </span>
           </div>
@@ -716,7 +725,7 @@ export function GradePontos({
         </div>
       )}
 
-      {/* MODAL DE PAGAMENTO PIX (após reserva de pontos - modo cliente) */}
+      {/* MODAL DE PAGAMENTO PIX */}
       <ModalCheckoutPix
         aberto={modalPagamentoAberto}
         pontos={pontosReservados ?? []}
@@ -730,6 +739,7 @@ export function GradePontos({
         onPagamentoConfirmado={() => {
           setSelecionados([]);
           fecharModalRegistro();
+          limparFormularioComprador();
           refrescarPontos();
           onVendasAlteradas?.();
         }}

@@ -103,9 +103,8 @@ export function ModalCheckoutPix({
 
     const cpfLimpo = compradorCpf ? compradorCpf.replace(/\D/g, "") : "";
 
-    // Evita submeter requisição se o CPF não for informado
     if (!cpfLimpo || cpfLimpo.length !== 11) {
-      setErro("Por favor, preencha um CPF válido com 11 dígitos.");
+      setErro("CPF inválido ou não informado. Volte e informe um CPF válido.");
       return;
     }
 
