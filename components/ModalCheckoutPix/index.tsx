@@ -49,6 +49,7 @@ export function ModalCheckoutPix({
 
   const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
   const valorTotal = pontos.length * VALOR_POR_PONTO;
@@ -66,7 +67,9 @@ export function ModalCheckoutPix({
   const verificarStatus = useCallback(
     async (pontoId: number) => {
       try {
-        const response = await fetch(`/api/pontos/status?id=${pontoId}`);
+        const response = await fetch(`/api/pontos/status?id=${pontoId}`, {
+          cache: "no-store",
+        });
         const data = await response.json();
 
         if (data.status === "pago") {
@@ -74,11 +77,17 @@ export function ModalCheckoutPix({
           if (mountedRef.current) {
             setConcluido(true);
             setAguardandoPagamento(false);
-            onPagamentoConfirmado();
+
+            // Aguarda 3.5 segundos exibindo a mensagem de sucesso e fecha automaticamente
+            autoCloseRef.current = setTimeout(() => {
+              if (mountedRef.current) {
+                onPagamentoConfirmado();
+              }
+            }, 3500);
           }
         }
       } catch {
-        // Erro silencioso no polling — tenta novamente na próxima checagem
+        // Silencioso no polling
       }
     },
     [limparIntervalo, onPagamentoConfirmado],
@@ -88,9 +97,10 @@ export function ModalCheckoutPix({
     (pontoId: number) => {
       limparIntervalo();
       setAguardandoPagamento(true);
+      // Consulta o banco a cada 2.5 segundos
       intervaloRef.current = setInterval(() => {
         verificarStatus(pontoId);
-      }, 3000);
+      }, 2500);
     },
     [limparIntervalo, verificarStatus],
   );
@@ -141,6 +151,7 @@ export function ModalCheckoutPix({
             setTempoRestante(diff);
           }
 
+          // Inicia a verificação contínua do pagamento
           iniciarPolling(primeiroPonto.id);
         }
       } catch (err: unknown) {
@@ -163,6 +174,7 @@ export function ModalCheckoutPix({
     return () => {
       mountedRef.current = false;
       limparIntervalo();
+      if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
     };
   }, [
     aberto,
@@ -217,6 +229,7 @@ export function ModalCheckoutPix({
   const handleFechar = async () => {
     limparIntervalo();
     if (timerRef.current) clearInterval(timerRef.current);
+    if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
 
     if (!concluido && pontos.length > 0) {
       try {
@@ -254,19 +267,29 @@ export function ModalCheckoutPix({
         </button>
 
         {concluido ? (
-          <div className="text-center py-6">
-            <CheckCircle className="w-16 h-16 text-emerald-500 mx-auto mb-4" />
-            <h3 className="text-lg font-bold text-neutral-900">
+          <div className="text-center py-8 animate-fadeIn">
+            <CheckCircle className="w-20 h-20 text-emerald-500 mx-auto mb-4 animate-bounce" />
+            <h3 className="text-xl font-bold text-neutral-900">
               Pagamento Confirmado!
             </h3>
             <p className="text-sm text-neutral-500 mt-2">
-              Os seus pontos foram pagos com sucesso via Pix.
+              Seus pontos (
+              <strong className="text-neutral-800">
+                {pontosOrdenados.join(", ")}
+              </strong>
+              ) foram pagos com sucesso.
+            </p>
+            <p className="text-xs text-neutral-400 mt-4">
+              Fechando automaticamente em alguns segundos...
             </p>
             <button
-              onClick={handleFechar}
+              onClick={() => {
+                if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
+                onPagamentoConfirmado();
+              }}
               className="mt-6 bg-[#801818] hover:bg-[#661313] text-white font-bold py-3 px-8 rounded-xl text-sm transition-all"
             >
-              Fechar
+              Concluir
             </button>
           </div>
         ) : (

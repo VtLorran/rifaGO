@@ -1,5 +1,8 @@
+// app/api/pontos/status/route.ts
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic"; // Desativa o cache do Next.js para esta rota
 
 export async function GET(request: Request) {
   try {
