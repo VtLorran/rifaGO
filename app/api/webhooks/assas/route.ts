@@ -5,10 +5,22 @@ const VALOR_POR_PONTO = 5.0;
 
 export async function POST(request: Request) {
   try {
+    // Validação opcional de segurança pelo header do Webhook do Asaas
+    const webhookTokenHeader = request.headers.get("asaas-access-token");
+    if (
+      process.env.ASAAS_WEBHOOK_TOKEN &&
+      webhookTokenHeader !== process.env.ASAAS_WEBHOOK_TOKEN
+    ) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
     const body = await request.json();
 
     // Disparado quando o Pix é pago e confirmado no banco do Asaas
-    if (body.event === "PAYMENT_RECEIVED") {
+    if (
+      body.event === "PAYMENT_RECEIVED" ||
+      body.event === "PAYMENT_CONFIRMED"
+    ) {
       const pontoId = body.payment?.externalReference;
 
       if (pontoId) {
@@ -22,7 +34,7 @@ export async function POST(request: Request) {
           return NextResponse.json({ received: true });
         }
 
-        // Só processa se ainda não estiver pago (evita duplicidade)
+        // Só processa se ainda não estiver pago (evita duplicidade de transações)
         if (ponto.status !== "pago") {
           await prisma.$transaction(async (tx) => {
             // Atualiza status do ponto para "pago"
@@ -31,7 +43,7 @@ export async function POST(request: Request) {
               data: { status: "pago" },
             });
 
-            // Regista o pagamento
+            // Registra o pagamento
             await tx.pagamento.create({
               data: {
                 ponto_id: Number(pontoId),
@@ -54,13 +66,12 @@ export async function POST(request: Request) {
           });
 
           console.log(
-            `✅ Pagamento confirmado via Asaas! Ponto #${pontoId} atualizado para PAGO. Valor incrementado no host.`,
+            `✅ Pagamento confirmado via Asaas! Ponto #${pontoId} atualizado para PAGO.`,
           );
         }
       }
     }
 
-    // Responde com sucesso ao Asaas
     return NextResponse.json({ received: true });
   } catch (error) {
     console.error("❌ Erro ao processar o Webhook do Asaas:", error);

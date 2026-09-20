@@ -78,7 +78,7 @@ export function ModalCheckoutPix({
           }
         }
       } catch {
-        // Erro silencioso no polling — tenta novamente no próximo ciclo
+        // Erro silencioso no polling — tenta novamente na próxima checagem
       }
     },
     [limparIntervalo, onPagamentoConfirmado],
@@ -95,11 +95,19 @@ export function ModalCheckoutPix({
     [limparIntervalo, verificarStatus],
   );
 
-  // Gerar Pix ao abrir o modal
   useEffect(() => {
     if (!aberto || pontos.length === 0) return;
 
     mountedRef.current = true;
+    setErro(null);
+
+    const cpfLimpo = compradorCpf ? compradorCpf.replace(/\D/g, "") : "";
+
+    // Evita submeter requisição se o CPF não for informado
+    if (!cpfLimpo || cpfLimpo.length !== 11) {
+      setErro("Por favor, preencha um CPF válido com 11 dígitos.");
+      return;
+    }
 
     const primeiroPonto = pontos[0];
 
@@ -113,7 +121,7 @@ export function ModalCheckoutPix({
             ponto_id: primeiroPonto.id,
             valor: valorTotal,
             comprador_nome: compradorNome || "Cliente RifaGO",
-            comprador_cpf: compradorCpf || "00000000000",
+            comprador_cpf: cpfLimpo,
             comprador_telefone: compradorTelefone || "",
           }),
         });
@@ -127,7 +135,6 @@ export function ModalCheckoutPix({
         if (mountedRef.current) {
           setPixData(data);
 
-          // Calcular tempo restante até expiração
           if (data.expiracao) {
             const expiracaoMs = new Date(data.expiracao).getTime();
             const agora = Date.now();
@@ -135,7 +142,6 @@ export function ModalCheckoutPix({
             setTempoRestante(diff);
           }
 
-          // Iniciar polling para o primeiro ponto
           iniciarPolling(primeiroPonto.id);
         }
       } catch (err: unknown) {
@@ -170,7 +176,6 @@ export function ModalCheckoutPix({
     limparIntervalo,
   ]);
 
-  // Timer de contagem regressiva
   useEffect(() => {
     if (tempoRestante === null || tempoRestante <= 0) return;
 
@@ -214,7 +219,6 @@ export function ModalCheckoutPix({
     limparIntervalo();
     if (timerRef.current) clearInterval(timerRef.current);
 
-    // Se não concluiu pagamento, cancela os pontos pendentes
     if (!concluido && pontos.length > 0) {
       try {
         await fetch("/api/pontos/cancelar", {
@@ -225,7 +229,7 @@ export function ModalCheckoutPix({
           }),
         });
       } catch {
-        // Erro silencioso — pontos pendentes ficam para limpeza manual
+        // Erro silencioso
       }
     }
 
@@ -278,7 +282,6 @@ export function ModalCheckoutPix({
               </p>
             </div>
 
-            {/* Resumo dos pontos */}
             <div className="bg-neutral-50 p-3.5 rounded-2xl border border-neutral-200 mb-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-neutral-500">
@@ -298,7 +301,6 @@ export function ModalCheckoutPix({
               </div>
             </div>
 
-            {/* QR Code */}
             {carregandoPix ? (
               <div className="bg-neutral-100 border-2 border-dashed border-neutral-300 rounded-2xl p-8 mb-5 flex flex-col items-center justify-center">
                 <Loader2 className="w-12 h-12 text-[#801818] animate-spin mb-3" />
@@ -324,7 +326,6 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {/* Código Pix Copia e Cola */}
             {pixData?.pix_copia_cola && (
               <div className="mb-5">
                 <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
@@ -349,7 +350,6 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {/* Timer de expiração */}
             {tempoRestante !== null && tempoRestante > 0 && (
               <div className="mb-4 flex items-center justify-center gap-2 text-xs text-neutral-500">
                 <Clock className="w-3.5 h-3.5" />
@@ -362,8 +362,7 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {/* Status do polling */}
-            {aguardandoPagamento && (
+            {aguardandoPagamento && !erro && (
               <div className="mb-4 flex items-center justify-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-xs">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 <span>Aguardando confirmação do pagamento...</span>
@@ -377,13 +376,11 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {/* Botão de copiar (atalho) */}
             {pixData?.pix_copia_cola && (
               <button
                 type="button"
                 onClick={handleCopiarPix}
-                disabled={aguardandoPagamento}
-                className="w-full bg-[#801818] hover:bg-[#661313] disabled:bg-neutral-300 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all"
+                className="w-full bg-[#801818] hover:bg-[#661313] text-white font-bold py-3.5 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all"
               >
                 {copiado ? (
                   <>
