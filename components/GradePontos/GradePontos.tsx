@@ -686,6 +686,8 @@ export function GradePontos({
       <ModalCheckoutPix
         aberto={modalPagamentoAberto}
         pontos={pontosReservados ?? []}
+        compradorNome={nomeComprador}
+        compradorTelefone={telefoneComprador}
         onFechar={() => {
           setModalPagamentoAberto(false);
           setPontosReservados(null);
