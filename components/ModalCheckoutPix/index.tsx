@@ -9,6 +9,7 @@ import {
   Copy,
   QrCode,
   Clock,
+  RefreshCw,
 } from "lucide-react";
 
 const VALOR_POR_PONTO = 5.0;
@@ -43,8 +44,9 @@ export function ModalCheckoutPix({
   const [pixData, setPixData] = useState<PixData | null>(null);
   const [concluido, setConcluido] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [copiado, setCopiado] = useState(false);
-  const [aguardandoPagamento, setAguardandoPagamento] = useState(false);
+  const [verificandoManual, setVerificandoManual] = useState(false);
   const [tempoRestante, setTempoRestante] = useState<number | null>(null);
 
   const intervaloRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,7 +66,22 @@ export function ModalCheckoutPix({
     }
   }, []);
 
-  const verificarStatus = useCallback(
+  const confirmarSucesso = useCallback(() => {
+    limparIntervalo();
+    if (mountedRef.current) {
+      setConcluido(true);
+      setVerificandoManual(false);
+
+      autoCloseRef.current = setTimeout(() => {
+        if (mountedRef.current) {
+          onPagamentoConfirmado();
+        }
+      }, 3500);
+    }
+  }, [limparIntervalo, onPagamentoConfirmado]);
+
+  // Consulta o banco local (polling regular)
+  const verificarStatusLocal = useCallback(
     async (pontoId: number) => {
       try {
         const response = await fetch(`/api/pontos/status?id=${pontoId}`, {
@@ -73,36 +90,68 @@ export function ModalCheckoutPix({
         const data = await response.json();
 
         if (data.status === "pago") {
-          limparIntervalo();
-          if (mountedRef.current) {
-            setConcluido(true);
-            setAguardandoPagamento(false);
-
-            // Aguarda 3.5 segundos exibindo a mensagem de sucesso e fecha automaticamente
-            autoCloseRef.current = setTimeout(() => {
-              if (mountedRef.current) {
-                onPagamentoConfirmado();
-              }
-            }, 3500);
-          }
+          confirmarSucesso();
         }
       } catch {
-        // Silencioso no polling
+        // Silencioso
       }
     },
-    [limparIntervalo, onPagamentoConfirmado],
+    [confirmarSucesso],
   );
+
+  // Consulta DIRETA no Asaas (Botão de recarregar / checar)
+  const checarPagamentoNoAsaas = async () => {
+    if (!pixData?.pagamento_id || pontos.length === 0) return;
+
+    setVerificandoManual(true);
+    setErro(null);
+    setInfo(null);
+
+    try {
+      const response = await fetch("/api/pagamento/verificar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pagamento_id: pixData.pagamento_id,
+          ponto_id: pontos[0].id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Erro ao consultar o Asaas.");
+      }
+
+      if (data.pago) {
+        confirmarSucesso();
+      } else {
+        setInfo(
+          data.mensagem ||
+            "Pagamento ainda não identificado. Se você já pagou, aguarde alguns segundos e clique novamente.",
+        );
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setErro(err.message);
+      } else {
+        setErro("Não foi possível verificar o pagamento no momento.");
+      }
+    } finally {
+      if (mountedRef.current) {
+        setVerificandoManual(false);
+      }
+    }
+  };
 
   const iniciarPolling = useCallback(
     (pontoId: number) => {
       limparIntervalo();
-      setAguardandoPagamento(true);
-      // Consulta o banco a cada 2.5 segundos
       intervaloRef.current = setInterval(() => {
-        verificarStatus(pontoId);
-      }, 2500);
+        verificarStatusLocal(pontoId);
+      }, 3000);
     },
-    [limparIntervalo, verificarStatus],
+    [limparIntervalo, verificarStatusLocal],
   );
 
   useEffect(() => {
@@ -110,6 +159,7 @@ export function ModalCheckoutPix({
 
     mountedRef.current = true;
     setErro(null);
+    setInfo(null);
 
     const cpfLimpo = compradorCpf ? compradorCpf.replace(/\D/g, "") : "";
 
@@ -151,7 +201,6 @@ export function ModalCheckoutPix({
             setTempoRestante(diff);
           }
 
-          // Inicia a verificação contínua do pagamento
           iniciarPolling(primeiroPonto.id);
         }
       } catch (err: unknown) {
@@ -247,9 +296,9 @@ export function ModalCheckoutPix({
 
     setConcluido(false);
     setErro(null);
+    setInfo(null);
     setCopiado(false);
     setPixData(null);
-    setAguardandoPagamento(false);
     setTempoRestante(null);
     onFechar();
   };
@@ -349,7 +398,7 @@ export function ModalCheckoutPix({
             )}
 
             {pixData?.pix_copia_cola && (
-              <div className="mb-5">
+              <div className="mb-4">
                 <label className="block text-xs font-semibold text-neutral-700 mb-1.5">
                   Pix Copia e Cola
                 </label>
@@ -384,10 +433,10 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {aguardandoPagamento && !erro && (
-              <div className="mb-4 flex items-center justify-center gap-2 bg-amber-50 border border-amber-200 text-amber-700 p-3 rounded-xl text-xs">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>Aguardando confirmação do pagamento...</span>
+            {info && (
+              <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs">
+                <Loader2 className="w-4 h-4 shrink-0 text-amber-600 animate-spin" />
+                <span>{info}</span>
               </div>
             )}
 
@@ -398,25 +447,49 @@ export function ModalCheckoutPix({
               </div>
             )}
 
-            {pixData?.pix_copia_cola && (
-              <button
-                type="button"
-                onClick={handleCopiarPix}
-                className="w-full bg-[#801818] hover:bg-[#661313] text-white font-bold py-3.5 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all"
-              >
-                {copiado ? (
-                  <>
-                    <CheckCircle className="w-4 h-4 text-emerald-400" />
-                    <span>Código Copiado!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-4 h-4" />
-                    <span>Copiar Código Pix</span>
-                  </>
-                )}
-              </button>
-            )}
+            {/* BOTÕES DE AÇÃO */}
+            <div className="space-y-2 mt-2">
+              {pixData?.pix_copia_cola && (
+                <button
+                  type="button"
+                  onClick={checarPagamentoNoAsaas}
+                  disabled={verificandoManual}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-300 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all"
+                >
+                  {verificandoManual ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Consultando Asaas...</span>
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      <span>Já fiz o pagamento / Checar Status</span>
+                    </>
+                  )}
+                </button>
+              )}
+
+              {pixData?.pix_copia_cola && (
+                <button
+                  type="button"
+                  onClick={handleCopiarPix}
+                  className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-800 font-semibold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-xs transition-all"
+                >
+                  {copiado ? (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-emerald-600" />
+                      <span>Código Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Código Pix Novamente</span>
+                    </>
+                  )}
+                </button>
+              )}
+            </div>
           </>
         )}
       </div>
