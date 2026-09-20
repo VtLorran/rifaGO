@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Consulta no Asaas
+    // 1. Consulta o status da cobrança direto na API do Asaas
     const responseAsaas = await fetch(`${asaasUrl}/payments/${pagamento_id}`, {
       method: "GET",
       headers: {
@@ -36,17 +36,7 @@ export async function POST(request: Request) {
       cache: "no-store",
     });
 
-    const asaasText = await responseAsaas.text();
-    let cobrancaData;
-
-    try {
-      cobrancaData = JSON.parse(asaasText);
-    } catch {
-      return NextResponse.json(
-        { error: "Resposta inválida retornada pela API do Asaas." },
-        { status: 502 },
-      );
-    }
+    const cobrancaData = await responseAsaas.json();
 
     if (!responseAsaas.ok) {
       const detalheErro =
@@ -57,7 +47,7 @@ export async function POST(request: Request) {
 
     const statusAsaas = cobrancaData.status;
 
-    // Se o Asaas atestar que foi pago
+    // 2. Se o Asaas atestar que foi pago (RECEIVED ou CONFIRMED)
     if (statusAsaas === "RECEIVED" || statusAsaas === "CONFIRMED") {
       const ponto = await prisma.ponto.findUnique({
         where: { id: Number(ponto_id) },
@@ -95,14 +85,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ pago: true, status: "pago" });
     }
 
+    // Caso o Asaas retorne PENDING ou outro status
     return NextResponse.json({
       pago: false,
       status: statusAsaas,
-      mensagem: `Status no Asaas: ${statusAsaas}. Aguarde alguns segundos após pagar e clique novamente.`,
+      mensagem: `Status no Asaas: ${statusAsaas}. Se você já pagou no seu banco, aguarde alguns segundos e tente novamente.`,
     });
   } catch (error: unknown) {
     console.error("Erro na verificação do pagamento:", error);
-    const msg = error instanceof Error ? error.message : "Erro interno.";
+    const msg =
+      error instanceof Error ? error.message : "Erro interno servidor.";
     return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

@@ -72,6 +72,7 @@ export function ModalCheckoutPix({
       setConcluido(true);
       setVerificandoManual(false);
 
+      // Exibe a tela verde por 3.5s e conclui
       autoCloseRef.current = setTimeout(() => {
         if (mountedRef.current) {
           onPagamentoConfirmado();
@@ -93,13 +94,13 @@ export function ModalCheckoutPix({
           confirmarSucesso();
         }
       } catch {
-        // Silencioso
+        // Erro silencioso no polling
       }
     },
     [confirmarSucesso],
   );
 
-  // Consulta DIRETA no Asaas (Botão de recarregar / checar)
+  // Consulta DIRETA na API do Asaas (Botão de Checar Status)
   const checarPagamentoNoAsaas = async () => {
     if (!pixData?.pagamento_id || pontos.length === 0) return;
 
@@ -123,9 +124,8 @@ export function ModalCheckoutPix({
       try {
         data = JSON.parse(text);
       } catch {
-        console.error("Servidor retornou HTML em vez de JSON:", text);
         throw new Error(
-          "Erro no servidor (resposta inválida). Verifique os logs do Next.js.",
+          "Resposta inválida do servidor. Verifique a rota da API.",
         );
       }
 
