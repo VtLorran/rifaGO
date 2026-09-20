@@ -1,0 +1,111 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Usuario {
+  id           Int      @id @default(autoincrement())
+  nome         String   @db.VarChar(150)
+  codigo_login String?  @unique // Código de acesso gerado pelo Host (para membros/hosts)
+  avatar_url   String? // Imagem de perfil
+  tipo         String   @db.VarChar(10) // 'user' (cliente final), 'member' (membro divulgador), 'host' (organizador)
+  senha_hash   String?  @db.VarChar(255) // <-- Campo para a senha do Host
+  criado_em    DateTime @default(now())
+
+  // Relacionamentos
+  hostsGerenciados    Host[]
+  pontosRegistrados   Ponto[] // Pontos criados por este usuário (se cliente ou membro)
+  linksCompartilhados LinkCompartilhamento[] // Links gerados por este membro
+  indicacoesFeitas    Indicacao[]            @relation("Indicador")
+  indicacoesRecebidas Indicacao[]            @relation("Indicado")
+
+  @@map("usuarios")
+}
+
+model Host {
+  id               Int      @id @default(autoincrement())
+  usuario_id       Int
+  usuario          Usuario  @relation(fields: [usuario_id], references: [id])
+  nome_evento      String   @db.VarChar(150)
+  valor_arrecadado Decimal  @default(0) @db.Decimal(12, 2)
+  criado_em        DateTime @default(now())
+
+  pontos Ponto[]
+
+  @@map("hosts")
+}
+
+model Ponto {
+  id      Int  @id @default(autoincrement())
+  host_id Int
+  host    Host @relation(fields: [host_id], references: [id])
+
+  // Quem comprou/registrou (opcional se for anônimo via Host ou Link de Membro)
+  usuario_id Int?
+  usuario    Usuario? @relation(fields: [usuario_id], references: [id])
+
+  // Dados do comprador caso ele não tenha conta logada
+  nome_comprador     String? @db.VarChar(150)
+  telefone_comprador String? @db.VarChar(20)
+
+  numero_ponto String @db.VarChar(50)
+  status       String @default("pendente") @db.VarChar(10) // 'pendente', 'pago', 'cancelado'
+
+  // Rastreio de qual membro teve o link acessado na compra
+  membro_indicador_id Int?
+
+  criado_em DateTime @default(now())
+
+  pagamentos Pagamento[]
+  links      LinkCompartilhamento[]
+
+  @@map("pontos")
+}
+
+model Indicacao {
+  id                   Int     @id @default(autoincrement())
+  usuario_indicador_id Int // O Membro que gerou o link
+  usuario_indicador    Usuario @relation("Indicador", fields: [usuario_indicador_id], references: [id])
+
+  usuario_indicado_id Int // O Cliente que comprou usando o link
+  usuario_indicado    Usuario @relation("Indicado", fields: [usuario_indicado_id], references: [id])
+
+  criado_em DateTime @default(now())
+
+  pagamentos Pagamento[]
+
+  @@map("indicacoes")
+}
+
+model Pagamento {
+  id       Int   @id @default(autoincrement())
+  ponto_id Int
+  ponto    Ponto @relation(fields: [ponto_id], references: [id])
+
+  indicacao_id Int? // Nullable
+  indicacao    Indicacao? @relation(fields: [indicacao_id], references: [id])
+
+  valor           Decimal   @db.Decimal(12, 2)
+  forma_pagamento String    @db.VarChar(30)
+  status          String    @default("pendente") @db.VarChar(10) // 'pendente', 'aprovado', 'recusado'
+  processado_em   DateTime?
+
+  @@map("pagamentos")
+}
+
+model LinkCompartilhamento {
+  id        Int     @id @default(autoincrement())
+  membro_id Int // Quem é o dono do link
+  membro    Usuario @relation(fields: [membro_id], references: [id])
+
+  ponto_id Int // O ponto associado ou referência do evento
+  ponto    Ponto @relation(fields: [ponto_id], references: [id])
+
+  url       String   @db.VarChar(255)
+  criado_em DateTime @default(now())
+
+  @@map("links_compartilhamento")
+}
