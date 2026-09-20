@@ -7,7 +7,8 @@ const VALOR_POR_PONTO = 5.0;
 
 export async function POST(request: Request) {
   try {
-    const { pagamento_id, ponto_id } = await request.json();
+    const body = await request.json();
+    const { pagamento_id, ponto_id } = body;
 
     if (!pagamento_id || !ponto_id) {
       return NextResponse.json(
@@ -21,12 +22,12 @@ export async function POST(request: Request) {
 
     if (!asaasUrl || !asaasKey) {
       return NextResponse.json(
-        { error: "Configuração da API do Asaas ausente." },
+        { error: "Configuração da API do Asaas ausente no servidor." },
         { status: 500 },
       );
     }
 
-    // 1. Consulta o status do pagamento direto na API do Asaas
+    // Consulta no Asaas
     const responseAsaas = await fetch(`${asaasUrl}/payments/${pagamento_id}`, {
       method: "GET",
       headers: {
@@ -35,7 +36,17 @@ export async function POST(request: Request) {
       cache: "no-store",
     });
 
-    const cobrancaData = await responseAsaas.json();
+    const asaasText = await responseAsaas.text();
+    let cobrancaData;
+
+    try {
+      cobrancaData = JSON.parse(asaasText);
+    } catch {
+      return NextResponse.json(
+        { error: "Resposta inválida retornada pela API do Asaas." },
+        { status: 502 },
+      );
+    }
 
     if (!responseAsaas.ok) {
       const detalheErro =
@@ -44,9 +55,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: detalheErro }, { status: 400 });
     }
 
-    const statusAsaas = cobrancaData.status; // Ex: RECEIVED, CONFIRMED, PENDING, OVERDUE
+    const statusAsaas = cobrancaData.status;
 
-    // 2. Se o Asaas atestar que foi pago/recebido
+    // Se o Asaas atestar que foi pago
     if (statusAsaas === "RECEIVED" || statusAsaas === "CONFIRMED") {
       const ponto = await prisma.ponto.findUnique({
         where: { id: Number(ponto_id) },
@@ -84,18 +95,14 @@ export async function POST(request: Request) {
       return NextResponse.json({ pago: true, status: "pago" });
     }
 
-    // Caso o Asaas ainda mostre como pendente
     return NextResponse.json({
       pago: false,
       status: statusAsaas,
-      mensagem:
-        "O pagamento ainda não foi identificado pelo Asaas. Aguarde alguns instantes e tente novamente.",
+      mensagem: `Status no Asaas: ${statusAsaas}. Aguarde alguns segundos após pagar e clique novamente.`,
     });
   } catch (error: unknown) {
-    console.error("Erro ao verificar pagamento diretamente no Asaas:", error);
-    return NextResponse.json(
-      { error: "Erro ao consultar o status do pagamento no Asaas." },
-      { status: 500 },
-    );
+    console.error("Erro na verificação do pagamento:", error);
+    const msg = error instanceof Error ? error.message : "Erro interno.";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

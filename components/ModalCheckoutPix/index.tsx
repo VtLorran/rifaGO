@@ -117,7 +117,17 @@ export function ModalCheckoutPix({
         }),
       });
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error("Servidor retornou HTML em vez de JSON:", text);
+        throw new Error(
+          "Erro no servidor (resposta inválida). Verifique os logs do Next.js.",
+        );
+      }
 
       if (!response.ok) {
         throw new Error(data.error || "Erro ao consultar o Asaas.");
