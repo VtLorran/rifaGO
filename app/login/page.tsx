@@ -155,7 +155,7 @@ export default function LoginPage() {
                 value={digitos}
                 onChange={handleDigitosChange}
                 placeholder="0000"
-                className="w-full bg-transparent px-4 py-3 text-sm font-mono font-extrabold text-neutral-900 tracking-widest placeholder:text-neutral-300 placeholder:font-normal focus:outline-none"
+                className="w-full bg-transparent px-4 py-3 text-base sm:text-sm font-mono font-extrabold text-neutral-900 tracking-widest placeholder:text-neutral-300 placeholder:font-normal focus:outline-none"
                 autoFocus
               />
             </div>
@@ -187,7 +187,7 @@ export default function LoginPage() {
                     setErro(null);
                   }}
                   placeholder="Digite sua senha secreta"
-                  className="w-full bg-transparent px-4 py-3 text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none pr-10"
+                  className="w-full bg-transparent px-4 py-3 text-base sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none pr-10"
                 />
 
                 <button

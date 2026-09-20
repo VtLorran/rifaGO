@@ -75,6 +75,7 @@ export function ModalCheckoutPix({
       // Exibe a tela verde por 3.5s e conclui
       autoCloseRef.current = setTimeout(() => {
         if (mountedRef.current) {
+          setConcluido(false);
           onPagamentoConfirmado();
         }
       }, 3500);
@@ -317,7 +318,7 @@ export function ModalCheckoutPix({
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
-      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-neutral-200 relative animate-slideUp">
+      <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200 relative animate-slideUp max-h-[90vh] overflow-y-auto">
         <button
           onClick={handleFechar}
           className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full bg-neutral-100"
@@ -343,6 +344,7 @@ export function ModalCheckoutPix({
             </p>
             <button
               onClick={() => {
+                setConcluido(false);
                 if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
                 onPagamentoConfirmado();
               }}

@@ -72,6 +72,9 @@ export function GradePontos({
   >(null);
   const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
 
+  // Estado do Modal de Info do Comprador (modo cliente)
+  const [pontoCompradorInfo, setPontoCompradorInfo] = useState<PontoDetalhe | null>(null);
+
   // Estado do Modal de Edição de Ponto (apenas Host)
   const [pontoEditando, setPontoEditando] = useState<PontoDetalhe | null>(null);
   const [editNomeComprador, setEditNomeComprador] = useState("");
@@ -147,6 +150,8 @@ export function GradePontos({
     if (ocupado) {
       if (isHost) {
         abrirEdicaoPonto(ocupado);
+      } else if (modo === "cliente") {
+        setPontoCompradorInfo(ocupado);
       }
       return;
     }
@@ -348,7 +353,7 @@ export function GradePontos({
           placeholder="Pesquisar número do ponto (ex: 42, 500, 1080)..."
           value={pesquisa}
           onChange={(e) => setPesquisa(e.target.value)}
-          className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-neutral-200 text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#801818] shadow-sm transition-all"
+          className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-neutral-200 text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#801818] shadow-sm transition-all text-base sm:text-sm"
         />
         {pesquisa && (
           <button
@@ -378,6 +383,12 @@ export function GradePontos({
           <div className="flex items-center gap-1.5">
             <Pencil className="w-3.5 h-3.5 text-[#801818]" />
             <span>Clique num ponto ocupado para editar</span>
+          </div>
+        )}
+        {!isHost && (
+          <div className="flex items-center gap-1.5">
+            <Pencil className="w-3.5 h-3.5 text-[#801818]" />
+            <span>Clique num ponto ocupado para ver detalhes</span>
           </div>
         )}
       </div>
@@ -412,11 +423,12 @@ export function GradePontos({
               <button
                 key={numero}
                 onClick={() => togglePonto(numero)}
-                disabled={!!ocupado && !isHost}
                 title={
-                  ocupado && isHost
-                    ? "Clique para editar este ponto"
-                    : undefined
+                  ocupado && !isHost && modo === "cliente"
+                    ? "Clique para ver detalhes"
+                    : ocupado && isHost
+                      ? "Clique para editar este ponto"
+                      : undefined
                 }
                 className={`
                   aspect-square rounded-full flex items-center justify-center text-xs font-bold transition-all transform active:scale-95 select-none
@@ -424,7 +436,7 @@ export function GradePontos({
                     ocupado
                       ? isHost
                         ? "bg-neutral-200 text-neutral-400 border border-neutral-300 opacity-60 hover:opacity-100 hover:border-[#801818] hover:text-[#801818] cursor-pointer"
-                        : "bg-neutral-200 text-neutral-400 border border-neutral-300 cursor-not-allowed line-through opacity-60"
+                        : "bg-neutral-200 text-neutral-400 border border-neutral-300 cursor-pointer hover:opacity-100 hover:border-[#801818] hover:text-[#801818] line-through opacity-60"
                       : estaSelecionado
                         ? "bg-emerald-600 text-white shadow-lg shadow-emerald-600/30 scale-105 border-2 border-emerald-400"
                         : "bg-[#801818] text-white font-bold hover:border-white hover:text-white shadow-sm"
@@ -470,7 +482,7 @@ export function GradePontos({
       {/* MODAL / FORMULÁRIO DE REGISTAR VENDA */}
       {modalAberto && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-neutral-200 relative animate-slideUp">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200 relative animate-slideUp max-h-[90vh] overflow-y-auto">
             <button
               onClick={fecharModalRegistro}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full bg-neutral-100"
@@ -524,7 +536,7 @@ export function GradePontos({
                   placeholder="Ex: Maria Silva"
                   value={nomeComprador}
                   onChange={(e) => setNomeComprador(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -538,7 +550,7 @@ export function GradePontos({
                   placeholder="(00) 00000-0000"
                   value={telefoneComprador}
                   onChange={(e) => setTelefoneComprador(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -561,7 +573,7 @@ export function GradePontos({
                         .replace(/(\d{3})(\d{1,2})$/, "$1-$2");
                       setCpfComprador(formatado);
                     }}
-                    className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm font-mono focus:outline-none focus:border-[#801818]"
+                    className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm font-mono focus:outline-none focus:border-[#801818]"
                   />
                 </div>
               )}
@@ -575,7 +587,7 @@ export function GradePontos({
                   <select
                     value={indicadorSelecionado}
                     onChange={(e) => setIndicadorSelecionado(e.target.value)}
-                    className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                    className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                   >
                     <option value="">Venda direta do Host</option>
                     {membrosDisponiveis.map((m) => (
@@ -614,7 +626,7 @@ export function GradePontos({
       {/* MODAL DE EDIÇÃO DE PONTO (HOST) */}
       {pontoEditando && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
-          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-neutral-200 relative animate-slideUp">
+          <div className="bg-white w-full max-w-md rounded-t-3xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200 relative animate-slideUp max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setPontoEditando(null)}
               className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full bg-neutral-100"
@@ -656,7 +668,7 @@ export function GradePontos({
                   value={editNomeComprador}
                   onChange={(e) => setEditNomeComprador(e.target.value)}
                   placeholder="Ex: Maria Silva"
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -669,7 +681,7 @@ export function GradePontos({
                   value={editTelefoneComprador}
                   onChange={(e) => setEditTelefoneComprador(e.target.value)}
                   placeholder="(00) 00000-0000"
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -681,7 +693,7 @@ export function GradePontos({
                 <select
                   value={editIndicador}
                   onChange={(e) => setEditIndicador(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 >
                   <option value="">Nenhum (venda direta do Host)</option>
                   {membrosDisponiveis.map((m) => (
@@ -725,6 +737,43 @@ export function GradePontos({
         </div>
       )}
 
+      {/* MODAL DE INFO DO COMPRADOR (MODO CLIENTE) */}
+      {pontoCompradorInfo && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
+          <div className="bg-white w-full max-w-sm rounded-t-3xl sm:rounded-3xl p-6 shadow-2xl border border-neutral-200 relative animate-slideUp max-h-[85vh] overflow-y-auto">
+            <button
+              onClick={() => setPontoCompradorInfo(null)}
+              className="absolute top-4 right-4 text-neutral-400 hover:text-neutral-600 p-1 rounded-full bg-neutral-100"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="mb-5">
+              <span className="bg-neutral-100 text-neutral-700 font-mono font-extrabold text-xs px-2.5 py-1 rounded-lg inline-block mb-2">
+                Ponto #{pontoCompradorInfo.numero_ponto}
+              </span>
+              <h3 className="text-lg font-bold text-neutral-900">
+                Detalhes do Ponto
+              </h3>
+            </div>
+
+            <div className="bg-neutral-50 p-4 rounded-2xl border border-neutral-200 mb-5">
+              <p className="text-xs text-neutral-500 mb-1">Comprado por:</p>
+              <p className="text-sm font-bold text-neutral-900">
+                {pontoCompradorInfo.nome_comprador || "Nome nao informado"}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setPontoCompradorInfo(null)}
+              className="w-full bg-[#801818] hover:bg-[#661313] text-white font-bold py-3 rounded-xl text-sm transition-all"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* MODAL DE PAGAMENTO PIX */}
       <ModalCheckoutPix
         aberto={modalPagamentoAberto}
@@ -737,6 +786,8 @@ export function GradePontos({
           setPontosReservados(null);
         }}
         onPagamentoConfirmado={() => {
+          setModalPagamentoAberto(false);
+          setPontosReservados(null);
           setSelecionados([]);
           fecharModalRegistro();
           limparFormularioComprador();

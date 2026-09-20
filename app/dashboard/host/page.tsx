@@ -554,7 +554,7 @@ export default function DashboardHostPage() {
       {/* MODAL DE CADASTRAR NOVO MEMBRO */}
       {modalMembroAberto && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-neutral-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-neutral-900">
               Cadastrar Novo Membro
             </h3>
@@ -573,7 +573,7 @@ export default function DashboardHostPage() {
                   placeholder="Ex: João Silva"
                   value={novoMembroNome}
                   onChange={(e) => setNovoMembroNome(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -591,7 +591,7 @@ export default function DashboardHostPage() {
                   onChange={(e) =>
                     setNovoMembroCodigo(e.target.value.replace(/\D/g, ""))
                   }
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm font-mono tracking-widest focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm font-mono tracking-widest focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
@@ -623,7 +623,7 @@ export default function DashboardHostPage() {
       {/* MODAL DE EDITAR MEMBRO */}
       {membroEditando && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-3xl p-6 shadow-2xl border border-neutral-200">
+          <div className="bg-white w-full max-w-md rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200 max-h-[90vh] overflow-y-auto">
             <h3 className="text-lg font-bold text-neutral-900">
               Editar Membro
             </h3>
@@ -652,7 +652,7 @@ export default function DashboardHostPage() {
                   placeholder="Ex: João Silva"
                   value={editMembroNome}
                   onChange={(e) => setEditMembroNome(e.target.value)}
-                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-sm focus:outline-none focus:border-[#801818]"
+                  className="w-full px-4 py-3 bg-neutral-50 rounded-xl border border-neutral-200 text-base sm:text-sm focus:outline-none focus:border-[#801818]"
                 />
               </div>
 
