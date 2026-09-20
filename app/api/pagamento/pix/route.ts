@@ -2,27 +2,34 @@ import { NextResponse } from "next/server";
 
 export async function POST(request: Request) {
   try {
-    const {
-      ponto_id,
-      comprador_nome,
-      comprador_cpf,
-      comprador_telefone,
-      valor,
-    } = await request.json();
+    const { ponto_id, comprador_nome, comprador_cpf, comprador_telefone, valor } =
+      await request.json();
 
-    if (!ponto_id || !comprador_nome || !comprador_cpf) {
+    if (!ponto_id || !comprador_nome) {
       return NextResponse.json(
-        { error: "Dados incompletos para gerar a cobrança Pix." },
+        { error: "ID do ponto e nome do comprador são obrigatórios." },
         { status: 400 },
       );
     }
 
-    const cpfLimpo = comprador_cpf.replace(/\D/g, "");
+    const cpfLimpo = comprador_cpf ? comprador_cpf.replace(/\D/g, "") : "";
     const telefoneLimpo = comprador_telefone
       ? comprador_telefone.replace(/\D/g, "")
       : undefined;
 
-    // 1. Cria ou regista o cliente no Asaas
+    // 1. Cria o cliente no Asaas (CPF/CNPJ obrigatório pelo Asaas)
+    const bodyCliente: Record<string, string> = {
+      name: comprador_nome,
+    };
+
+    if (cpfLimpo) {
+      bodyCliente.cpfCnpj = cpfLimpo;
+    }
+
+    if (telefoneLimpo) {
+      bodyCliente.phone = telefoneLimpo;
+    }
+
     const responseCliente = await fetch(
       `${process.env.ASAAS_API_URL}/customers`,
       {
@@ -31,11 +38,7 @@ export async function POST(request: Request) {
           "Content-Type": "application/json",
           access_token: process.env.ASAAS_API_KEY!,
         },
-        body: JSON.stringify({
-          name: comprador_nome,
-          cpfCnpj: cpfLimpo,
-          phone: telefoneLimpo,
-        }),
+        body: JSON.stringify(bodyCliente),
       },
     );
 
@@ -48,7 +51,7 @@ export async function POST(request: Request) {
       throw new Error(detalheErro);
     }
 
-    // 2. Cria a cobrança via Pix associando o ID do ponto no externalReference
+    // 2. Cria a cobrança via Pix
     const responseCobranca = await fetch(
       `${process.env.ASAAS_API_URL}/payments`,
       {
@@ -61,7 +64,7 @@ export async function POST(request: Request) {
           customer: clienteData.id,
           billingType: "PIX",
           value: Number(valor),
-          dueDate: new Date().toISOString().split("T")[0], // Vencimento para o mesmo dia
+          dueDate: new Date().toISOString().split("T")[0],
           description: `RifaGO - Ponto #${ponto_id}`,
           externalReference: String(ponto_id),
         }),
@@ -71,10 +74,13 @@ export async function POST(request: Request) {
     const cobrancaData = await responseCobranca.json();
 
     if (!responseCobranca.ok) {
-      throw new Error("Erro ao criar a cobrança no Asaas.");
+      const detalheErro =
+        cobrancaData.errors?.[0]?.description ||
+        "Erro ao criar a cobrança no Asaas.";
+      throw new Error(detalheErro);
     }
 
-    // 3. Procura o QR Code e o código Pix Copia e Cola da cobrança
+    // 3. Busca o QR Code e o código Pix Copia e Cola
     const responsePixQrCode = await fetch(
       `${process.env.ASAAS_API_URL}/payments/${cobrancaData.id}/pixQrCode`,
       {
@@ -85,6 +91,13 @@ export async function POST(request: Request) {
     );
 
     const pixData = await responsePixQrCode.json();
+
+    if (!responsePixQrCode.ok) {
+      const detalheErro =
+        pixData.errors?.[0]?.description ||
+        "Erro ao buscar QR Code do Pix.";
+      throw new Error(detalheErro);
+    }
 
     return NextResponse.json({
       pagamento_id: cobrancaData.id,

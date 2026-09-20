@@ -210,9 +210,25 @@ export function ModalCheckoutPix({
     }
   };
 
-  const handleFechar = () => {
+  const handleFechar = async () => {
     limparIntervalo();
     if (timerRef.current) clearInterval(timerRef.current);
+
+    // Se não concluiu pagamento, cancela os pontos pendentes
+    if (!concluido && pontos.length > 0) {
+      try {
+        await fetch("/api/pontos/cancelar", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ponto_ids: pontos.map((p) => p.id),
+          }),
+        });
+      } catch {
+        // Erro silencioso — pontos pendentes ficam para limpeza manual
+      }
+    }
+
     setConcluido(false);
     setErro(null);
     setCopiado(false);
