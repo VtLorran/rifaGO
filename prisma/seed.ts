@@ -41,7 +41,7 @@ async function main() {
     update: {},
     create: {
       usuario_id: hostUser.id,
-      nome_evento: "RifaGO - Evento Principal 1080 Pontos",
+      nome_evento: "RifaGO - Evento Principal 1200 Pontos",
       valor_arrecadado: 0.0,
     },
   });

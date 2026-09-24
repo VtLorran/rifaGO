@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { ModalCheckoutPix } from "@/components/ModalCheckoutPix";
 
-const TOTAL_PONTOS = 1080;
+const TOTAL_PONTOS = 1200;
 const VALOR_POR_PONTO = 5.0;
 
 export type ModoGrade = "cliente" | "member" | "host";
@@ -350,7 +350,7 @@ export function GradePontos({
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
         <input
           type="text"
-          placeholder="Pesquisar número do ponto (ex: 42, 500, 1080)..."
+          placeholder="Pesquisar número do ponto (ex: 42, 500, 1200)..."
           value={pesquisa}
           onChange={(e) => setPesquisa(e.target.value)}
           className="w-full pl-12 pr-4 py-3.5 bg-white rounded-2xl border border-neutral-200 text-neutral-900 placeholder:text-neutral-400 focus:outline-none focus:border-[#801818] shadow-sm transition-all text-base sm:text-sm"

@@ -26,9 +26,9 @@ export function DashboardHeader({
   children,
 }: DashboardHeaderProps) {
   return (
-    <div className="bg-[#801818] text-white p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+    <div className="bg-[#801818] text-white p-4 sm:p-6 rounded-3xl shadow-xl flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 overflow-hidden">
       {/* Lado Esquerdo: Logo + Título */}
-      <div className="flex items-center gap-4 min-w-0">
+      <div className="flex items-center gap-3 sm:gap-4 min-w-0 flex-1">
         <Image
           src="/logo-2.png"
           alt="RifaGO Logo"
@@ -38,17 +38,17 @@ export function DashboardHeader({
           priority
         />
 
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <span className="bg-amber-400 text-black font-extrabold text-[10px] px-2 py-0.5 rounded-md uppercase tracking-wider inline-block">
             {role === "host" ? "Painel Host" : "Painel Membro"}
           </span>
-          <h1 className="text-xl font-bold mt-1 truncate">{titulo}</h1>
-          <p className="text-xs text-white/80 mt-0.5 truncate">
+          <h1 className="text-base sm:text-xl font-bold mt-1 truncate">{titulo}</h1>
+          <p className="text-[11px] sm:text-xs text-white/80 mt-0.5 truncate">
             {resumo}
             {nome ? (
               <>
                 {" "}
-                <strong className="text-white">{nome}</strong>.
+                <strong className="text-white truncate">{nome}</strong>.
               </>
             ) : null}
           </p>
@@ -56,11 +56,11 @@ export function DashboardHeader({
       </div>
 
       {/* Lado Direito: Ações */}
-      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
         {/* Link de Vendas (mesmo estilo para Host e Membro) */}
         <button
           onClick={onCopiarLink}
-          className="bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-4 py-2.5 rounded-2xl border border-white/20 shadow flex items-center gap-2 transition-all active:scale-95"
+          className="bg-white/15 hover:bg-white/25 text-white font-bold text-xs px-3 sm:px-4 py-2.5 rounded-2xl border border-white/20 shadow flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap"
           title="Copiar meu link de vendas"
         >
           {linkCopiado ? (

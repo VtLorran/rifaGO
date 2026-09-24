@@ -12,7 +12,7 @@ model Usuario {
   codigo_login String?  @unique // Código de acesso gerado pelo Host (para membros/hosts)
   avatar_url   String? // Imagem de perfil
   tipo         String   @db.VarChar(10) // 'user' (cliente final), 'member' (membro divulgador), 'host' (organizador)
-  senha_hash   String?  @db.VarChar(255) // <-- Campo para a senha do Host
+  senha_hash   String?  @db.VarChar(255) // Hash da senha (Host e Membros)
   criado_em    DateTime @default(now())
 
   // Relacionamentos
@@ -56,6 +56,9 @@ model Ponto {
 
   // Rastreio de qual membro teve o link acessado na compra
   membro_indicador_id Int?
+
+  // Controle de repasse financeiro do membro para o host
+  pago_ao_host Boolean @default(false) // true = host confirmou recebimento do valor
 
   criado_em DateTime @default(now())
 

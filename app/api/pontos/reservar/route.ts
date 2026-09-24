@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/auth";
 
 const NUMERO_MINIMO = 1;
-const NUMERO_MAXIMO = 1080;
+const NUMERO_MAXIMO = 1200;
 const HOST_ID_PADRAO = 1;
 
 export async function POST(request: Request) {

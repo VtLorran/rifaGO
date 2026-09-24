@@ -34,17 +34,17 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Validação da faixa de pontos (apenas números de 1 a 1080)
+    // 2. Validação da faixa de pontos (apenas números de 1 a 1200)
     const pontosInvalidos = numeros_pontos.filter((num) => {
       const n = Number(num);
-      return isNaN(n) || n < 1 || n > 1080;
+      return isNaN(n) || n < 1 || n > 1200;
     });
 
     if (pontosInvalidos.length > 0) {
       return NextResponse.json(
         {
           error:
-            "Números de ponto inválidos detectados. Escolha apenas pontos entre 1 e 1080.",
+            "Números de ponto inválidos detectados. Escolha apenas pontos entre 1 e 1200.",
         },
         { status: 400 },
       );
@@ -82,6 +82,7 @@ export async function POST(request: Request) {
                 ? Number(membro_indicador_id)
                 : null,
               status: "pendente",
+              pago_ao_host: false,
             },
           }),
         ),

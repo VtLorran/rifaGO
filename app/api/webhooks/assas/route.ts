@@ -37,10 +37,9 @@ export async function POST(request: Request) {
         // Só processa se ainda não estiver pago (evita duplicidade de transações)
         if (ponto.status !== "pago") {
           await prisma.$transaction(async (tx) => {
-            // Atualiza status do ponto para "pago"
             await tx.ponto.update({
               where: { id: Number(pontoId) },
-              data: { status: "pago" },
+              data: { status: "pago", pago_ao_host: true },
             });
 
             // Registra o pagamento

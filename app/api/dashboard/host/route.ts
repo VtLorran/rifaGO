@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 import { getAuthUser } from '@/lib/auth'
 
-const TOTAL_PONTOS_EVENTO = 1080
+const TOTAL_PONTOS_EVENTO = 1200
 const VALOR_POR_PONTO = 5.0
 
 export async function GET(request: Request) {
@@ -51,7 +51,7 @@ export async function GET(request: Request) {
     // 3. Busca todos os membros cadastrados
     const membros = await prisma.usuario.findMany({
       where: { tipo: 'member' },
-      select: { id: true, nome: true, avatar_url: true, codigo_login: true },
+      select: { id: true, nome: true, avatar_url: true, codigo_login: true, senha_hash: true },
     })
 
     // Mapeia o desempenho e pontuação de cada membro
@@ -67,6 +67,7 @@ export async function GET(request: Request) {
         nome: membro.nome,
         avatar_url: membro.avatar_url,
         codigo_login: membro.codigo_login,
+        tem_senha: !!membro.senha_hash,
         pontos_vendidos: quantidade,
         valor_arrecadado: totalArrecadado,
         numeros_pontos: pontosDoMembro.map((p) => p.numero_ponto),

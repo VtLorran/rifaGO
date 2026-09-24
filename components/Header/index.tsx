@@ -3,7 +3,7 @@
 import React from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { LogIn, Share2, ShoppingBag, LogOut, User } from "lucide-react";
+import { LogIn, Share2, ShoppingBag, LogOut, User, Info } from "lucide-react";
 
 interface HeaderProps {
   // Estado mockado ou vindo do seu contexto/cookie
@@ -75,6 +75,15 @@ export function Header({
                 </span>
               </div>
             )}
+
+            {/* Botão Sobre o Evento */}
+            <Link
+              href="/sobre"
+              className="flex items-center gap-2 bg-white/10 hover:bg-white/20 text-white text-xs font-semibold px-4 py-2 rounded-xl transition-all border border-white/10"
+            >
+              <Info className="w-3.5 h-3.5" />
+              <span>Sobre o Evento</span>
+            </Link>
 
             {/* Botão Entrar na Área do Membro/Host */}
             <Link

@@ -22,10 +22,10 @@ export default function LoginPage() {
   const [senha, setSenha] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
   const [exigeSenha, setExigeSenha] = useState(false);
+  const [isHost, setIsHost] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [carregando, setCarregando] = useState(false);
 
-  // Monitora a digitação dos 4 dígitos para exibir o campo de senha se for '0000'
   const handleDigitosChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const valor = e.target.value.replace(/\D/g, "");
     setDigitos(valor);
@@ -33,8 +33,10 @@ export default function LoginPage() {
 
     if (valor === "0000") {
       setExigeSenha(true);
+      setIsHost(true);
     } else {
       setExigeSenha(false);
+      setIsHost(false);
       setSenha("");
     }
   };
@@ -45,7 +47,6 @@ export default function LoginPage() {
 
     const digitosLimpos = digitos.trim();
 
-    // Validação local rápida
     if (!/^\d{4}$/.test(digitosLimpos)) {
       setErro(
         "Por favor, digite exatamente os 4 dígitos numéricos do seu código.",
@@ -53,39 +54,100 @@ export default function LoginPage() {
       return;
     }
 
-    if (exigeSenha && !senha.trim()) {
-      setErro("A senha é obrigatória para o acesso de Host.");
-      return;
-    }
-
     const codigoCompleto = `${PREFIXO_CODIGO}${digitosLimpos}`;
     setCarregando(true);
 
     try {
-      const response = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          codigo_login: codigoCompleto,
-          senha: exigeSenha ? senha : undefined,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        if (data.exigeSenha) {
-          setExigeSenha(true);
+      if (isHost) {
+        // Login do Host via rota existente
+        if (!senha.trim()) {
+          setErro("A senha é obrigatória para o acesso de Host.");
+          setCarregando(false);
+          return;
         }
-        throw new Error(
-          data.error || "Erro ao realizar login. Verifique os dados.",
-        );
-      }
 
-      // Redireciona conforme o tipo de usuário retornado
-      if (data.user.tipo === "host") {
-        router.push("/dashboard/host");
+        const response = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            codigo_login: codigoCompleto,
+            senha,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          if (data.exigeSenha) {
+            setExigeSenha(true);
+          }
+          throw new Error(
+            data.error || "Erro ao realizar login. Verifique os dados.",
+          );
+        }
+
+        if (data.user.tipo === "host") {
+          router.push("/dashboard/host");
+        } else {
+          router.push("/dashboard/membro");
+        }
       } else {
+        // Fluxo para membros: primeiro verificar matrícula
+        const verificarResponse = await fetch("/api/membros/verificar-matricula", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ digitos: digitosLimpos }),
+        });
+
+        const verificarData = await verificarResponse.json();
+
+        if (!verificarResponse.ok) {
+          throw new Error(
+            verificarData.error || "Erro ao verificar matrícula.",
+          );
+        }
+
+        // Se membro não tem senha, redireciona para primeiro acesso
+        if (!verificarData.ja_possui_senha) {
+          router.push("/membro/primeiro-acesso");
+          return;
+        }
+
+        // Se membro já tem senha, pedir senha
+        if (!exigeSenha) {
+          setExigeSenha(true);
+          setCarregando(false);
+          return;
+        }
+
+        // Validar senha do membro
+        if (!senha.trim()) {
+          setErro("A senha é obrigatória.");
+          setCarregando(false);
+          return;
+        }
+
+        const loginResponse = await fetch("/api/membros/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            digitos: digitosLimpos,
+            senha,
+          }),
+        });
+
+        const loginData = await loginResponse.json();
+
+        if (!loginResponse.ok) {
+          if (loginData.primeiro_acesso) {
+            router.push("/membro/primeiro-acesso");
+            return;
+          }
+          throw new Error(
+            loginData.error || "Erro ao realizar login.",
+          );
+        }
+
         router.push("/dashboard/membro");
       }
 
@@ -103,11 +165,9 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4">
-      {/* Card Principal */}
       <div className="w-full max-w-md bg-white rounded-3xl shadow-xl overflow-hidden border border-neutral-200">
-        {/* Banner Superior no tom Vinho/Vermelho */}
+        {/* Banner */}
         <div className="bg-[#801818] p-8 text-white text-center flex flex-col items-center justify-center relative">
-          {/* Circulo decorativo de fundo */}
           <div className="absolute -top-12 -right-12 w-32 h-32 bg-white/5 rounded-full blur-xl pointer-events-none" />
 
           <Image
@@ -119,14 +179,14 @@ export default function LoginPage() {
             priority
           />
           <h1 className="text-xl font-bold">Área do Membro & Host</h1>
-          <p className="text-xs text-white/80 font font-semibold mt-1">
+          <p className="text-xs text-white/80 font-semibold mt-1">
             Insira os seus dígitos de acesso para gerir as suas vendas.
           </p>
         </div>
 
-        {/* Formulário de Login */}
+        {/* Formulário */}
         <form onSubmit={handleLogin} className="p-8 space-y-5">
-          {/* Exibição de Erro */}
+          {/* Erro */}
           {erro && (
             <div className="flex items-start gap-2.5 bg-red-50 border border-red-200 text-red-700 p-3.5 rounded-2xl text-xs leading-relaxed animate-fadeIn">
               <AlertCircle className="w-4 h-4 text-red-500 shrink-0 mt-0.5" />
@@ -134,20 +194,18 @@ export default function LoginPage() {
             </div>
           )}
 
-          {/* Campo do Código com Prefixo Fixo */}
+          {/* Campo do Código */}
           <div className="space-y-2">
             <label className="block text-xs font-semibold text-neutral-700 uppercase tracking-wider">
               Código de Acesso
             </label>
 
             <div className="flex items-center rounded-2xl border-2 border-neutral-200 focus-within:border-[#801818] transition-all bg-neutral-50/50 overflow-hidden">
-              {/* Prefixo Fixo (Bloqueado) */}
               <div className="bg-neutral-100 border-r border-neutral-200 px-3.5 py-3 text-xs font-mono font-bold text-neutral-500 select-none flex items-center gap-1.5">
                 <KeyRound className="w-3.5 h-3.5 text-neutral-400" />
                 <span>{PREFIXO_CODIGO}</span>
               </div>
 
-              {/* Input dos 4 últimos dígitos */}
               <input
                 type="text"
                 inputMode="numeric"
@@ -165,17 +223,19 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Campo de Senha Secreta do Host (Aparece dinamicamente) */}
+          {/* Campo de Senha (Host ou Membro) */}
           {exigeSenha && (
             <div className="space-y-2 pt-1 animate-fadeIn">
               <div className="flex items-center justify-between">
                 <label className="block text-xs font-semibold text-[#801818] uppercase tracking-wider flex items-center gap-1">
                   <Lock className="w-3 h-3 text-[#801818]" />
-                  <span>Senha do Host</span>
+                  <span>{isHost ? "Senha do Host" : "Sua Senha"}</span>
                 </label>
-                <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
-                  Acesso Host
-                </span>
+                {isHost && (
+                  <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
+                    Acesso Host
+                  </span>
+                )}
               </div>
 
               <div className="relative flex items-center rounded-2xl border-2 border-[#801818]/30 focus-within:border-[#801818] transition-all bg-neutral-50/50 overflow-hidden">
@@ -186,7 +246,11 @@ export default function LoginPage() {
                     setSenha(e.target.value);
                     setErro(null);
                   }}
-                  placeholder="Digite sua senha secreta"
+                  placeholder={
+                    isHost
+                      ? "Digite sua senha secreta"
+                      : "Digite sua senha"
+                  }
                   className="w-full bg-transparent px-4 py-3 text-base sm:text-sm text-neutral-900 placeholder:text-neutral-400 focus:outline-none pr-10"
                 />
 
@@ -228,7 +292,17 @@ export default function LoginPage() {
             )}
           </button>
 
-          {/* Rodapé / Informação de Segurança */}
+          {/* Link Primeiro Acesso */}
+          <div className="text-center">
+            <a
+              href="/membro/primeiro-acesso"
+              className="text-xs text-[#801818] hover:text-[#661313] font-semibold underline underline-offset-2 transition-colors"
+            >
+              Primeiro acesso? Defina sua senha aqui
+            </a>
+          </div>
+
+          {/* Rodapé */}
           <div className="pt-2 text-center flex items-center justify-center gap-1.5 text-[11px] text-neutral-400">
             <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
             <span>Acesso restrito e seguro por credencial do evento</span>
