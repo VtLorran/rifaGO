@@ -186,9 +186,9 @@ export function ModalCheckoutPix({
           body: JSON.stringify({
             host_id: hostId,
             numeros_pontos: numerosPontos,
-            comprador_nome: compradorNome || "Cliente RifaGO",
-            comprador_cpf: cpfLimpo,
-            comprador_telefone: compradorTelefone || "",
+            nome_comprador: compradorNome || "Cliente RifaGO",
+            cpf_comprador: cpfLimpo,
+            telefone_comprador: compradorTelefone || "",
             membro_indicador_id: membroIndicadorId ?? null,
           }),
         });
