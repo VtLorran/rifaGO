@@ -25,6 +25,8 @@ import {
   Calendar,
   X,
   CircleDollarSign,
+  PauseCircle,
+  PlayCircle,
 } from "lucide-react";
 import { DashboardHeader } from "@/components/DashboardHeader";
 import { GradePontos } from "@/components/GradePontos/GradePontos";
@@ -68,6 +70,12 @@ interface VendaManual {
   criado_em: string;
   membro: { id: number; nome: string } | null;
   membro_indicador_id: number | null;
+}
+
+interface EstadoPlataforma {
+  pausada: boolean;
+  mensagem: string;
+  pausado_em: string | null;
 }
 
 export default function DashboardHostPage() {
@@ -124,6 +132,11 @@ export default function DashboardHostPage() {
   const [processandoCancelamento, setProcessandoCancelamento] =
     useState(false);
 
+  // Controlo de pausa da plataforma (modo manutenção)
+  const [plataforma, setPlataforma] = useState<EstadoPlataforma | null>(null);
+  const [alterandoPausa, setAlterandoPausa] = useState(false);
+  const [modalPausaAberto, setModalPausaAberto] = useState(false);
+
   useEffect(() => {
     let ativo = true;
 
@@ -179,6 +192,26 @@ export default function DashboardHostPage() {
       })
       .finally(() => {
         if (ativo) setCarregandoVendas(false);
+      });
+
+    return () => {
+      ativo = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let ativo = true;
+
+    fetch("/api/plataforma/estado")
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Falha ao carregar o estado.");
+        return await response.json();
+      })
+      .then((result) => {
+        if (ativo) setPlataforma(result as EstadoPlataforma);
+      })
+      .catch(() => {
+        // Silencioso - o botão apenas fica indisponível
       });
 
     return () => {
@@ -359,6 +392,47 @@ export default function DashboardHostPage() {
     router.refresh();
   };
 
+  const handleConfirmarPausa = async () => {
+    if (!plataforma) return;
+
+    const vaiPausar = !plataforma.pausada;
+    setAlterandoPausa(true);
+    setErro(null);
+
+    try {
+      const response = await fetch("/api/plataforma/pausar", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pausada: vaiPausar }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          result.error || "Erro ao alterar o estado da plataforma.",
+        );
+      }
+
+      setPlataforma(result as EstadoPlataforma);
+      setModalPausaAberto(false);
+      setMembroSucesso(
+        vaiPausar
+          ? "Plataforma pausada. Apenas membros e hosts têm acesso."
+          : "Plataforma reativada. Os clientes podem comprar novamente.",
+      );
+      router.refresh();
+    } catch (err: unknown) {
+      setErro(
+        err instanceof Error
+          ? err.message
+          : "Erro ao alterar o estado da plataforma.",
+      );
+    } finally {
+      setAlterandoPausa(false);
+    }
+  };
+
   const abrirModalBaixa = (venda: VendaManual) => {
     setVendaSelecionadaBaixa(venda);
     setModalBaixaAberto(true);
@@ -534,6 +608,35 @@ export default function DashboardHostPage() {
             <UserPlus className="w-4 h-4" />
             <span>Cadastrar Membro</span>
           </button>
+
+          <button
+            onClick={() => setModalPausaAberto(true)}
+            disabled={alterandoPausa || !plataforma}
+            className={`${
+              plataforma?.pausada
+                ? "bg-emerald-600 hover:bg-emerald-500"
+                : "bg-amber-500 hover:bg-amber-400 text-neutral-900"
+            } disabled:bg-white/20 disabled:text-white/60 disabled:cursor-not-allowed text-white font-bold text-xs px-4 py-2.5 rounded-2xl shadow flex items-center gap-2 transition-all active:scale-95 whitespace-nowrap`}
+            title={
+              plataforma?.pausada
+                ? "Reativar as vendas para os clientes"
+                : "Interromper as atividades dos clientes"
+            }
+          >
+            {alterandoPausa ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : plataforma?.pausada ? (
+              <>
+                <PlayCircle className="w-4 h-4" />
+                <span>Reativar Plataforma</span>
+              </>
+            ) : (
+              <>
+                <PauseCircle className="w-4 h-4" />
+                <span>Pausar Plataforma</span>
+              </>
+            )}
+          </button>
         </DashboardHeader>
 
         {/* MENSAGEM DE ERRO OU SUCESSO GLOBAL */}
@@ -548,6 +651,83 @@ export default function DashboardHostPage() {
           <div className="bg-emerald-50 border border-emerald-200 text-emerald-700 p-4 rounded-2xl text-xs flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-500 shrink-0" />
             <span>{membroSucesso}</span>
+          </div>
+        )}
+
+        {/* CARD DE ESTADO DA PLATAFORMA */}
+        {plataforma && (
+          <div
+            className={`p-5 rounded-3xl shadow-md border flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
+              plataforma.pausada
+                ? "bg-amber-50 border-amber-200"
+                : "bg-emerald-50 border-emerald-200"
+            }`}
+          >
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`text-xs font-extrabold uppercase tracking-wider ${
+                    plataforma.pausada ? "text-amber-800" : "text-emerald-800"
+                  }`}
+                >
+                  {plataforma.pausada
+                    ? "Plataforma Pausada"
+                    : "Plataforma Ativa"}
+                </span>
+                <span
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    plataforma.pausada
+                      ? "bg-amber-200 text-amber-900"
+                      : "bg-emerald-200 text-emerald-900"
+                  }`}
+                >
+                  {plataforma.pausada ? "Manutenção" : "A Selling"}
+                </span>
+              </div>
+              <p className="text-xs text-neutral-600 font-medium">
+                {plataforma.pausada ? (
+                  <>
+                    Clientes e visitantes veem &quot;
+                    {plataforma.mensagem}&quot;. Membros e hosts continuam a
+                    operar normalmente.
+                    {plataforma.pausado_em && (
+                      <>
+                        {" "}
+                        Pausada em{" "}
+                        {new Date(plataforma.pausado_em).toLocaleString("pt-BR")}
+                        .
+                      </>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    Os clientes podem comprar pontos e gerar pagamentos Pix
+                    normalmente.
+                  </>
+                )}
+              </p>
+            </div>
+
+            <button
+              onClick={() => setModalPausaAberto(true)}
+              className={`w-full md:w-auto shrink-0 font-bold text-xs px-4 py-2.5 rounded-2xl shadow flex items-center justify-center gap-2 transition-all active:scale-95 ${
+                plataforma.pausada
+                  ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                  : "bg-amber-500 hover:bg-amber-400 text-neutral-900"
+              }`}
+            >
+              {plataforma.pausada ? (
+                <>
+                  <PlayCircle className="w-4 h-4" />
+                  <span>Reativar Plataforma</span>
+                </>
+              ) : (
+                <>
+                  <PauseCircle className="w-4 h-4" />
+                  <span>Pausar Plataforma</span>
+                </>
+              )}
+            </button>
           </div>
         )}
 
@@ -1190,6 +1370,100 @@ export default function DashboardHostPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE PAUSAR / REATIVAR A PLATAFORMA */}
+      {modalPausaAberto && plataforma && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-3xl p-4 sm:p-6 shadow-2xl border border-neutral-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div
+                className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                  plataforma.pausada
+                    ? "bg-emerald-100"
+                    : "bg-amber-100"
+                }`}
+              >
+                {plataforma.pausada ? (
+                  <PlayCircle className="w-5 h-5 text-emerald-600" />
+                ) : (
+                  <PauseCircle className="w-5 h-5 text-amber-600" />
+                )}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-neutral-900">
+                  {plataforma.pausada
+                    ? "Reativar Plataforma"
+                    : "Pausar Plataforma"}
+                </h3>
+                <p className="text-xs text-neutral-500">
+                  {plataforma.pausada
+                    ? "Volte a liberar as vendas para os clientes"
+                    : "Interrompa as atividades dos clientes"}
+                </p>
+              </div>
+            </div>
+
+            <div
+              className={`border p-4 rounded-2xl text-xs space-y-1 mb-4 ${
+                plataforma.pausada
+                  ? "bg-emerald-50 border-emerald-200 text-emerald-800"
+                  : "bg-amber-50 border-amber-200 text-amber-800"
+              }`}
+            >
+              {plataforma.pausada ? (
+                <p>
+                  Os clientes voltarão a ver a rifa e a poder comprar pontos e
+                  pagar via Pix imediatamente.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    A página de vendas deixará de funcionar para clientes e
+                    visitantes, que verão a mensagem{" "}
+                    <strong>&quot;{plataforma.mensagem}&quot;</strong>.
+                  </p>
+                  <p className="opacity-80">
+                    Membros e hosts continuam a aceder aos seus painéis
+                    normalmente, pelo link de login.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => setModalPausaAberto(false)}
+                className="w-full bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-bold py-3 rounded-xl text-xs transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmarPausa}
+                disabled={alterandoPausa}
+                className={`w-full disabled:opacity-60 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl shadow text-xs flex items-center justify-center gap-2 transition-all ${
+                  plataforma.pausada
+                    ? "bg-emerald-600 hover:bg-emerald-500"
+                    : "bg-amber-500 hover:bg-amber-400 text-neutral-900"
+                }`}
+              >
+                {alterandoPausa ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : plataforma.pausada ? (
+                  <>
+                    <PlayCircle className="w-4 h-4" />
+                    <span>Reativar</span>
+                  </>
+                ) : (
+                  <>
+                    <PauseCircle className="w-4 h-4" />
+                    <span>Pausar</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

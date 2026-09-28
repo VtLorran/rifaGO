@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getBloqueioDeAcesso } from "@/lib/plataforma";
 
 export async function POST(request: Request) {
   try {
+    const bloqueio = await getBloqueioDeAcesso();
+
+    if (bloqueio) {
+      return NextResponse.json(
+        { error: bloqueio.mensagem },
+        { status: 503 },
+      );
+    }
+
     const body = await request.json();
     const {
       host_id,

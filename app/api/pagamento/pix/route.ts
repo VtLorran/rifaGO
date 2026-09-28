@@ -1,7 +1,17 @@
 import { NextResponse } from "next/server";
+import { getBloqueioDeAcesso } from "@/lib/plataforma";
 
 export async function POST(request: Request) {
   try {
+    const bloqueio = await getBloqueioDeAcesso();
+
+    if (bloqueio) {
+      return NextResponse.json(
+        { error: bloqueio.mensagem },
+        { status: 503 },
+      );
+    }
+
     const {
       ponto_id,
       comprador_nome,

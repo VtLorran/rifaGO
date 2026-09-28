@@ -68,6 +68,21 @@ model Ponto {
   @@map("pontos")
 }
 
+// Configuração global da plataforma (registo único, id = 1).
+// Quando `pausada` é true, os clientes (tipo 'user') e visitantes
+// não logados veem a tela de manutenção, enquanto membros e hosts
+// continuam com acesso normal aos seus painéis.
+model ConfiguracaoPlataforma {
+  id            Int       @id @default(1)
+  pausada       Boolean   @default(false)
+  mensagem      String    @default("Plataforma pausada para manutenção") @db.VarChar(255)
+  pausado_por   Int? // ID do host que ativou a pausa
+  pausado_em    DateTime?
+  atualizado_em DateTime  @default(now()) @updatedAt
+
+  @@map("configuracoes_plataforma")
+}
+
 model Indicacao {
   id                   Int     @id @default(autoincrement())
   usuario_indicador_id Int // O Membro que gerou o link
