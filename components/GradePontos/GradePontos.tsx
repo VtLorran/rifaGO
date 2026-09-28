@@ -14,9 +14,9 @@ import {
   Users,
 } from "lucide-react";
 import { ModalCheckoutPix } from "@/components/ModalCheckoutPix";
+import { VALOR_POR_PONTO } from "@/lib/constantes";
 
 const TOTAL_PONTOS = 1200;
-const VALOR_POR_PONTO = 5.0;
 
 export type ModoGrade = "cliente" | "member" | "host";
 
@@ -67,9 +67,9 @@ export function GradePontos({
   const [sucesso, setSucesso] = useState<string | null>(null);
 
   // Estado do Modal de Pagamento Pix
-  const [pontosReservados, setPontosReservados] = useState<
-    { id: number; numero_ponto: string }[] | null
-  >(null);
+  const [pontosReservados, setPontosReservados] = useState<string[] | null>(
+    null,
+  );
   const [modalPagamentoAberto, setModalPagamentoAberto] = useState(false);
 
   // Estado do Modal de Info do Comprador (modo cliente)
@@ -247,7 +247,7 @@ export function GradePontos({
       }
 
       if (modo === "cliente") {
-        setPontosReservados(data.pontos);
+        setPontosReservados(data.numeros_pontos);
         fecharModalRegistro();
         setModalPagamentoAberto(true);
       } else {
@@ -777,10 +777,12 @@ export function GradePontos({
       {/* MODAL DE PAGAMENTO PIX */}
       <ModalCheckoutPix
         aberto={modalPagamentoAberto}
-        pontos={pontosReservados ?? []}
+        hostId={hostId}
+        numerosPontos={pontosReservados ?? []}
         compradorNome={nomeComprador}
         compradorCpf={cpfComprador}
         compradorTelefone={telefoneComprador}
+        membroIndicadorId={membroIndicadorId}
         onFechar={() => {
           setModalPagamentoAberto(false);
           setPontosReservados(null);

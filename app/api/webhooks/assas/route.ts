@@ -1,79 +1,111 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
+import {
+  asCredenciaisEstaoConfiguradas,
+  consultarPagamento,
+  contextoDoMetadata,
+  pontoIdLegado,
+} from "@/lib/asaas";
+import {
+  confirmarPagamentoPix,
+  confirmarPontoExistente,
+} from "@/lib/pagamento";
 
-const VALOR_POR_PONTO = 5.0;
-
+/**
+ * Rede de segurança para quando o comprador fecha o navegador antes de o
+ * polling concluir. Usa exatamente a mesma função de confirmação do polling,
+ * que já é idempotente — por isso os dois caminhos podem chegar em
+ * simultâneo sem duplicar pontos nem o valor arrecadado.
+ */
 export async function POST(request: Request) {
   try {
-    // Validação opcional de segurança pelo header do Webhook do Asaas
-    const webhookTokenHeader = request.headers.get("asaas-access-token");
+    const tokenHeader = request.headers.get("asaas-access-token");
     if (
       process.env.ASAAS_WEBHOOK_TOKEN &&
-      webhookTokenHeader !== process.env.ASAAS_WEBHOOK_TOKEN
+      tokenHeader !== process.env.ASAAS_WEBHOOK_TOKEN
     ) {
       return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
     }
 
     const body = await request.json();
 
-    // Disparado quando o Pix é pago e confirmado no banco do Asaas
     if (
-      body.event === "PAYMENT_RECEIVED" ||
-      body.event === "PAYMENT_CONFIRMED"
+      body.event !== "PAYMENT_RECEIVED" &&
+      body.event !== "PAYMENT_CONFIRMED"
     ) {
-      const pontoId = body.payment?.externalReference;
+      return NextResponse.json({ received: true });
+    }
 
-      if (pontoId) {
-        const ponto = await prisma.ponto.findUnique({
-          where: { id: Number(pontoId) },
-          select: { id: true, status: true, host_id: true },
-        });
+    const pagamentoId: string | undefined = body.payment?.id;
 
-        if (!ponto) {
-          console.error(`❌ Ponto #${pontoId} não encontrado.`);
-          return NextResponse.json({ received: true });
-        }
+    if (!pagamentoId) {
+      return NextResponse.json({ received: true });
+    }
 
-        // Só processa se ainda não estiver pago (evita duplicidade de transações)
-        if (ponto.status !== "pago") {
-          await prisma.$transaction(async (tx) => {
-            await tx.ponto.update({
-              where: { id: Number(pontoId) },
-              data: { status: "pago", pago_ao_host: true },
-            });
+    // O webhook não traz metadata de forma fiável em todos os casos.
+    // Quando falta, reabrimos a cobrança para ler o contexto autoritativo.
+    let cobranca = {
+      status: "RECEIVED" as string,
+      valor: 0,
+      metadata: (body.payment?.metadata ?? null) as Record<
+        string,
+        unknown
+      > | null,
+      externalReference: (body.payment?.externalReference ?? null) as string | null,
+    };
 
-            // Registra o pagamento
-            await tx.pagamento.create({
-              data: {
-                ponto_id: Number(pontoId),
-                valor: VALOR_POR_PONTO,
-                forma_pagamento: "pix",
-                status: "aprovado",
-                processado_em: new Date(),
-              },
-            });
+    if (!asCredenciaisEstaoConfiguradas()) {
+      console.error("[webhook] Credenciais do Asaas não configuradas.");
+      return NextResponse.json({ received: true });
+    }
 
-            // Incrementa o valor arrecadado no host/evento
-            await tx.host.update({
-              where: { id: ponto.host_id },
-              data: {
-                valor_arrecadado: {
-                  increment: VALOR_POR_PONTO,
-                },
-              },
-            });
-          });
+    try {
+      cobranca = await consultarPagamento(pagamentoId);
+    } catch (erro) {
+      console.error(
+        `[webhook] Falha ao consultar a cobrança ${pagamentoId}:`,
+        erro,
+      );
+      return NextResponse.json({ received: true });
+    }
 
-          console.log(
-            `✅ Pagamento confirmado via Asaas! Ponto #${pontoId} atualizado para PAGO.`,
-          );
-        }
+    const contexto = contextoDoMetadata(cobranca.metadata);
+
+    if (contexto) {
+      const resultado = await confirmarPagamentoPix({
+        pagamentoAsaasId: pagamentoId,
+        hostId: contexto.hostId,
+        numerosPontos: contexto.numerosPontos,
+        nomeComprador: contexto.nomeComprador,
+        cpfComprador: contexto.cpfComprador,
+        telefoneComprador: contexto.telefoneComprador,
+        membroIndicadorId: contexto.membroIndicadorId,
+        valorRecebido: cobranca.valor || undefined,
+      });
+
+      if (!resultado.ok) {
+        console.error(
+          `[webhook] Cobrança ${pagamentoId} paga e não confirmada (${resultado.motivo}): ${resultado.numeros.join(",")}. Requer estorno manual.`,
+        );
       }
+
+      return NextResponse.json({ received: true });
+    }
+
+    // Cobrança gerada antes desta mudança: o externalReference era o id de
+    // um ponto já criado com status 'pendente'.
+    const legado = pontoIdLegado(cobranca.externalReference);
+
+    if (legado !== null) {
+      await confirmarPontoExistente(legado, pagamentoId);
+    } else {
+      console.error(
+        `[webhook] Cobrança ${pagamentoId} (R$ ${cobranca.valor}) recebida sem contexto reconhecível. Reconciliação manual necessária no Asaas.`,
+      );
     }
 
     return NextResponse.json({ received: true });
   } catch (error) {
-    console.error("❌ Erro ao processar o Webhook do Asaas:", error);
+    console.error("Erro ao processar o Webhook do Asaas:", error);
     return NextResponse.json(
       { error: "Erro ao processar webhook" },
       { status: 500 },

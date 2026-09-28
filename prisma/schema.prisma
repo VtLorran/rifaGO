@@ -49,6 +49,7 @@ model Ponto {
 
   // Dados do comprador caso ele não tenha conta logada
   nome_comprador     String? @db.VarChar(150)
+  cpf_comprador      String? @db.VarChar(11)
   telefone_comprador String? @db.VarChar(20)
 
   numero_ponto String @db.VarChar(50)
@@ -65,6 +66,10 @@ model Ponto {
   pagamentos Pagamento[]
   links      LinkCompartilhamento[]
 
+  // Garante que um mesmo número não possa ser vendido duas vezes no mesmo
+  // evento. É o bloqueio atómico da "reivindicação" feita na confirmação
+  // do pagamento: se o INSERT falhar, outro cliente já comprou o número.
+  @@unique([host_id, numero_ponto])
   @@map("pontos")
 }
 
@@ -110,6 +115,11 @@ model Pagamento {
   forma_pagamento String    @db.VarChar(30)
   status          String    @default("pendente") @db.VarChar(10) // 'pendente', 'aprovado', 'recusado'
   processado_em   DateTime?
+
+  // ID da cobrança no Asaas. Não é único: uma cobrança pode cobrir vários
+  // pontos. É a chave de idempotência e de rastreabilidade entre o polling
+  // do frontend e o webhook, que podem chegar em simultâneo.
+  pagamento_asaas_id String? @db.VarChar(60)
 
   @@map("pagamentos")
 }

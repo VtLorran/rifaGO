@@ -11,15 +11,16 @@ import {
   Clock,
   RefreshCw,
 } from "lucide-react";
-
-const VALOR_POR_PONTO = 5.0;
+import { VALOR_POR_PONTO } from "@/lib/constantes";
 
 interface ModalCheckoutPixProps {
   aberto: boolean;
-  pontos: { id: number; numero_ponto: string }[];
+  hostId: number;
+  numerosPontos: string[];
   compradorNome?: string;
   compradorCpf?: string;
   compradorTelefone?: string;
+  membroIndicadorId?: number | null;
   onFechar: () => void;
   onPagamentoConfirmado: () => void;
 }
@@ -33,10 +34,12 @@ interface PixData {
 
 export function ModalCheckoutPix({
   aberto,
-  pontos,
+  hostId,
+  numerosPontos,
   compradorNome,
   compradorCpf,
   compradorTelefone,
+  membroIndicadorId,
   onFechar,
   onPagamentoConfirmado,
 }: ModalCheckoutPixProps) {
@@ -53,11 +56,20 @@ export function ModalCheckoutPix({
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoCloseRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
+  const pixDataRef = useRef<PixData | null>(null);
+  const onConfirmadoRef = useRef(onPagamentoConfirmado);
 
-  const valorTotal = pontos.length * VALOR_POR_PONTO;
-  const pontosOrdenados = [...pontos]
-    .map((p) => p.numero_ponto)
-    .sort((a, b) => Number(a) - Number(b));
+  useEffect(() => {
+    onConfirmadoRef.current = onPagamentoConfirmado;
+  });
+
+  const registrarPixData = useCallback((data: PixData | null) => {
+    pixDataRef.current = data;
+    setPixData(data);
+  }, []);
+
+  const valorTotal = numerosPontos.length * VALOR_POR_PONTO;
+  const numerosOrdenados = [...numerosPontos].sort((a, b) => Number(a) - Number(b));
 
   const limparIntervalo = useCallback(() => {
     if (intervaloRef.current) {
@@ -76,110 +88,94 @@ export function ModalCheckoutPix({
       autoCloseRef.current = setTimeout(() => {
         if (mountedRef.current) {
           setConcluido(false);
-          onPagamentoConfirmado();
+          onConfirmadoRef.current();
         }
       }, 3500);
     }
-  }, [limparIntervalo, onPagamentoConfirmado]);
+  }, [limparIntervalo]);
 
-  // Consulta o banco local (polling regular)
-  const verificarStatusLocal = useCallback(
-    async (pontoId: number) => {
-      try {
-        const response = await fetch(`/api/pontos/status?id=${pontoId}`, {
-          cache: "no-store",
-        });
-        const data = await response.json();
-
-        if (data.status === "pago") {
-          confirmarSucesso();
-        }
-      } catch {
-        // Erro silencioso no polling
-      }
-    },
-    [confirmarSucesso],
-  );
-
-  // Consulta DIRETA na API do Asaas (Botão de Checar Status)
-  const checarPagamentoNoAsaas = async () => {
-    if (!pixData?.pagamento_id || pontos.length === 0) return;
-
-    setVerificandoManual(true);
-    setErro(null);
-    setInfo(null);
+  // Consulta o Asaas (usado tanto no polling quanto no botão "Checar Status")
+  const chamarVerificacao = useCallback(async () => {
+    const paginaId = pixDataRef.current?.pagamento_id;
+    if (!paginaId || numerosPontos.length === 0) return;
 
     try {
       const response = await fetch("/api/pagamento/verificar", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          pagamento_id: pixData.pagamento_id,
-          ponto_id: pontos[0].id,
+          pagamento_id: paginaId,
+          host_id: hostId,
+          numeros_pontos: numerosPontos,
+          nome_comprador: compradorNome || "Cliente RifaGO",
+          cpf_comprador: compradorCpf ? compradorCpf.replace(/\D/g, "") : "",
+          telefone_comprador: compradorTelefone || "",
         }),
+        cache: "no-store",
       });
 
-      const text = await response.text();
-      let data;
+      const data = await response.json();
 
-      try {
-        data = JSON.parse(text);
-      } catch {
-        throw new Error(
-          "Resposta inválida do servidor. Verifique a rota da API.",
+      if (response.status === 409) {
+        setInfo(
+          "Seu pagamento chegou, mas estes pontos já foram vendidos por outra pessoa no intervalo. Procure o host para estorno.",
         );
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || "Erro ao consultar o Asaas.");
+        return;
       }
 
       if (data.pago) {
         confirmarSucesso();
-      } else {
-        setInfo(
-          data.mensagem ||
-            "Pagamento ainda não identificado. Se você já pagou, aguarde alguns segundos e clique novamente.",
-        );
+        return;
       }
-    } catch (err: unknown) {
-      if (err instanceof Error) {
-        setErro(err.message);
-      } else {
-        setErro("Não foi possível verificar o pagamento no momento.");
-      }
-    } finally {
-      if (mountedRef.current) {
-        setVerificandoManual(false);
-      }
-    }
-  };
 
-  const iniciarPolling = useCallback(
-    (pontoId: number) => {
-      limparIntervalo();
-      intervaloRef.current = setInterval(() => {
-        verificarStatusLocal(pontoId);
-      }, 3000);
-    },
-    [limparIntervalo, verificarStatusLocal],
-  );
+      setInfo(
+        data.mensagem ||
+          "Pagamento ainda não identificado. Se você já pagou, aguarde alguns segundos.",
+      );
+    } catch {
+      // Falha de rede: silenciosa, o próximo ciclo do polling tenta de novo
+    }
+  }, [
+    numerosPontos,
+    hostId,
+    compradorNome,
+    compradorCpf,
+    compradorTelefone,
+    confirmarSucesso,
+  ]);
+
+  const iniciarPolling = useCallback(() => {
+    limparIntervalo();
+    intervaloRef.current = setInterval(() => {
+      chamarVerificacao();
+    }, 3000);
+  }, [limparIntervalo, chamarVerificacao]);
+
+  const checkoutIniciadoRef = useRef(false);
+
+  const cpfLimpo = compradorCpf ? compradorCpf.replace(/\D/g, "") : "";
+  const cpfInvalido =
+    aberto && numerosPontos.length > 0 && cpfLimpo.length !== 11;
+  // Derivado: o contador chegou a zero e o pagamento não foi confirmado.
+  const pixExpirado =
+    tempoRestante === 0 &&
+    !concluido &&
+    Boolean(pixData);
 
   useEffect(() => {
-    if (!aberto || pontos.length === 0) return;
-
-    mountedRef.current = true;
-    setErro(null);
-    setInfo(null);
-
-    const cpfLimpo = compradorCpf ? compradorCpf.replace(/\D/g, "") : "";
-
-    if (!cpfLimpo || cpfLimpo.length !== 11) {
-      setErro("CPF inválido ou não informado. Volte e informe um CPF válido.");
+    // Trava: garante que a cobrança é criada UMA única vez por abertura,
+    // mesmo que o pai re-renderize e troque a identidade dos callbacks.
+    if (!aberto || numerosPontos.length === 0) {
+      checkoutIniciadoRef.current = false;
       return;
     }
 
-    const primeiroPonto = pontos[0];
+    if (checkoutIniciadoRef.current) return;
+    checkoutIniciadoRef.current = true;
+
+    mountedRef.current = true;
+
+    if (cpfInvalido) return;
 
     const gerarPix = async () => {
       setCarregandoPix(true);
@@ -188,11 +184,12 @@ export function ModalCheckoutPix({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            ponto_id: primeiroPonto.id,
-            valor: valorTotal,
+            host_id: hostId,
+            numeros_pontos: numerosPontos,
             comprador_nome: compradorNome || "Cliente RifaGO",
             comprador_cpf: cpfLimpo,
             comprador_telefone: compradorTelefone || "",
+            membro_indicador_id: membroIndicadorId ?? null,
           }),
         });
 
@@ -203,16 +200,19 @@ export function ModalCheckoutPix({
         }
 
         if (mountedRef.current) {
-          setPixData(data);
+          registrarPixData(data);
 
-          if (data.expiracao) {
-            const expiracaoMs = new Date(data.expiracao).getTime();
-            const agora = Date.now();
-            const diff = Math.max(0, Math.floor((expiracaoMs - agora) / 1000));
-            setTempoRestante(diff);
-          }
+          // Contador: o Pix precisa ser pago em até 10 minutos. Usa a
+          // expiração do Asaas se vier menor.
+          const asaasExpira = data.expiracao
+            ? Math.max(
+                0,
+                Math.floor((new Date(data.expiracao).getTime() - Date.now()) / 1000),
+              )
+            : 600;
+          setTempoRestante(Math.min(asaasExpira, 600) || 600);
 
-          iniciarPolling(primeiroPonto.id);
+          iniciarPolling();
         }
       } catch (err: unknown) {
         if (mountedRef.current) {
@@ -238,11 +238,15 @@ export function ModalCheckoutPix({
     };
   }, [
     aberto,
-    pontos,
+    numerosPontos,
+    hostId,
+    membroIndicadorId,
     compradorNome,
     compradorCpf,
     compradorTelefone,
-    valorTotal,
+    cpfInvalido,
+    cpfLimpo,
+    registrarPixData,
     iniciarPolling,
     limparIntervalo,
   ]);
@@ -256,7 +260,8 @@ export function ModalCheckoutPix({
 
     timerRef.current = setInterval(() => {
       setTempoRestante((prev) => {
-        if (prev === null || prev <= 1) {
+        if (prev === null) return prev;
+        if (prev <= 1) {
           if (timerRef.current) clearInterval(timerRef.current);
           return 0;
         }
@@ -268,6 +273,15 @@ export function ModalCheckoutPix({
       if (timerRef.current) clearInterval(timerRef.current);
     };
   }, [tempoRestante]);
+
+  // Tempo esgotado: para o polling. A cobrança no Asaas também expira,
+  // então basta fechar e refazer. O aviso é renderizado via estado derivado.
+  useEffect(() => {
+    if (pixExpirado) {
+      limparIntervalo();
+      if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
+    }
+  }, [pixExpirado, limparIntervalo]);
 
   const formatarTempo = (segundos: number) => {
     const min = Math.floor(segundos / 60);
@@ -291,30 +305,25 @@ export function ModalCheckoutPix({
     if (timerRef.current) clearInterval(timerRef.current);
     if (autoCloseRef.current) clearTimeout(autoCloseRef.current);
 
-    if (!concluido && pontos.length > 0) {
-      try {
-        await fetch("/api/pontos/cancelar", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ponto_ids: pontos.map((p) => p.id),
-          }),
-        });
-      } catch {
-        // Erro silencioso
-      }
+    // Se o pagamento já tinha sido confirmado e o usuário fechou pela "X",
+    // garante que a grade atualiza para refletir os pontos vendidos.
+    if (concluido) {
+      onConfirmadoRef.current();
     }
 
+    // Nada de cancelar pontos ao fechar: neste fluxo não existe reserva a
+    // remover — a cobrança simplesmente expira no Asaas.
     setConcluido(false);
     setErro(null);
     setInfo(null);
     setCopiado(false);
-    setPixData(null);
+    registrarPixData(null);
     setTempoRestante(null);
+    checkoutIniciadoRef.current = false;
     onFechar();
   };
 
-  if (!aberto || pontos.length === 0) return null;
+  if (!aberto || numerosPontos.length === 0) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-fadeIn">
@@ -335,7 +344,7 @@ export function ModalCheckoutPix({
             <p className="text-sm text-neutral-500 mt-2">
               Seus pontos (
               <strong className="text-neutral-800">
-                {pontosOrdenados.join(", ")}
+                {numerosOrdenados.join(", ")}
               </strong>
               ) foram pagos com sucesso.
             </p>
@@ -368,10 +377,10 @@ export function ModalCheckoutPix({
             <div className="bg-neutral-50 p-3.5 rounded-2xl border border-neutral-200 mb-5">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-neutral-500">
-                  Pontos reservados:
+                  Pontos selecionados:
                 </span>
                 <span className="text-xs font-mono font-bold text-neutral-800">
-                  {pontosOrdenados.join(", ")}
+                  {numerosOrdenados.join(", ")}
                 </span>
               </div>
               <div className="flex items-center justify-between border-t border-neutral-200 pt-2">
@@ -445,6 +454,24 @@ export function ModalCheckoutPix({
               </div>
             )}
 
+            {cpfInvalido && (
+              <div className="mb-4 flex items-center gap-2 bg-red-50 border border-red-200 text-red-700 p-3 rounded-xl text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-red-500" />
+                <span>
+                  CPF inválido ou não informado. Volte e informe um CPF válido.
+                </span>
+              </div>
+            )}
+
+            {pixExpirado && (
+              <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs">
+                <AlertCircle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>
+                  O tempo para pagamento expirou. Feche e tente novamente.
+                </span>
+              </div>
+            )}
+
             {info && (
               <div className="mb-4 flex items-center gap-2 bg-amber-50 border border-amber-200 text-amber-800 p-3 rounded-xl text-xs">
                 <Loader2 className="w-4 h-4 shrink-0 text-amber-600 animate-spin" />
@@ -464,7 +491,13 @@ export function ModalCheckoutPix({
               {pixData?.pix_copia_cola && (
                 <button
                   type="button"
-                  onClick={checarPagamentoNoAsaas}
+                  onClick={async () => {
+                    setVerificandoManual(true);
+                    setErro(null);
+                    setInfo(null);
+                    await chamarVerificacao();
+                    if (mountedRef.current) setVerificandoManual(false);
+                  }}
                   disabled={verificandoManual}
                   className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-neutral-300 text-white font-bold py-3.5 px-4 rounded-xl shadow-lg flex items-center justify-center gap-2 text-sm transition-all"
                 >

@@ -1,163 +1,94 @@
 import { NextResponse } from "next/server";
 import { getBloqueioDeAcesso } from "@/lib/plataforma";
+import {
+  asCredenciaisEstaoConfiguradas,
+  criarCobrancaPix,
+  ContextoCompra,
+} from "@/lib/asaas";
+import { VALOR_POR_PONTO } from "@/lib/constantes";
+import {
+  eventoExiste,
+  normalizarCompra,
+  pontosJaOcupados,
+} from "@/lib/pagamento";
 
+/**
+ * Cria a cobrança Pix no Asaas.
+ *
+ * NÃO grava nada no banco de dados. O contexto da compra (quais pontos,
+ * quem comprou) viaja dentro do `metadata` da própria cobrança, e só será
+ * materializado em `pontos` / `pagamentos` depois de o Asaas responder
+ * RECEIVED ou CONFIRMED.
+ */
 export async function POST(request: Request) {
   try {
     const bloqueio = await getBloqueioDeAcesso();
 
     if (bloqueio) {
+      return NextResponse.json({ error: bloqueio.mensagem }, { status: 503 });
+    }
+
+    if (!asCredenciaisEstaoConfiguradas()) {
+      console.error("[pix] Credenciais do Asaas não configuradas.");
       return NextResponse.json(
-        { error: bloqueio.mensagem },
+        { error: "O pagamento por Pix está temporariamente indisponível." },
         { status: 503 },
       );
     }
 
-    const {
-      ponto_id,
-      comprador_nome,
-      comprador_cpf,
-      comprador_telefone,
-      valor,
-    } = await request.json();
+    const resultado = normalizarCompra(await request.json());
 
-    if (!ponto_id || !comprador_nome) {
+    if (!resultado.ok) {
+      return NextResponse.json({ error: resultado.erro }, { status: 400 });
+    }
+
+    const compra = resultado.compra;
+
+    if (!(await eventoExiste(compra.hostId))) {
       return NextResponse.json(
-        { error: "ID do ponto e nome do comprador são obrigatórios." },
-        { status: 400 },
+        { error: "Evento não encontrado." },
+        { status: 404 },
       );
     }
 
-    const cpfLimpo = comprador_cpf ? comprador_cpf.replace(/\D/g, "") : "";
-    const telefoneLimpo = comprador_telefone
-      ? comprador_telefone.replace(/\D/g, "")
-      : undefined;
+    const ocupados = await pontosJaOcupados(compra.hostId, compra.numerosPontos);
 
-    // Validação estrita do CPF antes de chamar o Asaas
-    if (!cpfLimpo || cpfLimpo.length !== 11) {
-      return NextResponse.json(
-        { error: "É necessário informar um CPF válido com 11 dígitos." },
-        { status: 400 },
-      );
-    }
-
-    const asaasUrl = process.env.ASAAS_API_URL?.replace(/\/$/, "");
-    const asaasKey = process.env.ASAAS_API_KEY;
-
-    if (!asaasUrl || !asaasKey) {
+    if (ocupados.length > 0) {
       return NextResponse.json(
         {
-          error:
-            "Configuração da API do Asaas ausente nas variáveis de ambiente.",
+          error: `Estes pontos já foram vendidos: ${ocupados.join(", ")}`,
+          pontos_ocupados: ocupados,
         },
-        { status: 500 },
+        { status: 409 },
       );
     }
 
-    // 1. Verifica se o cliente já existe no Asaas pelo CPF para evitar erro de duplicidade
-    let customerId = "";
+    const contexto: ContextoCompra = {
+      hostId: compra.hostId,
+      numerosPontos: compra.numerosPontos,
+      nomeComprador: compra.nomeComprador,
+      cpfComprador: compra.cpfComprador,
+      telefoneComprador: compra.telefoneComprador,
+      membroIndicadorId: compra.membroIndicadorId,
+    };
 
-    const responseBusca = await fetch(
-      `${asaasUrl}/customers?cpfCnpj=${cpfLimpo}`,
-      {
-        method: "GET",
-        headers: {
-          access_token: asaasKey,
-        },
-      },
+    const cobranca = await criarCobrancaPix(
+      contexto,
+      VALOR_POR_PONTO * compra.numerosPontos.length,
     );
-
-    const buscaData = await responseBusca.json();
-
-    if (responseBusca.ok && buscaData.data && buscaData.data.length > 0) {
-      // Cliente já cadastrado no Asaas
-      customerId = buscaData.data[0].id;
-    } else {
-      // Cliente não encontrado: cria novo cadastro no Asaas
-      const bodyCliente: Record<string, string> = {
-        name: comprador_nome,
-        cpfCnpj: cpfLimpo,
-      };
-
-      if (telefoneLimpo) {
-        bodyCliente.phone = telefoneLimpo;
-      }
-
-      const responseCliente = await fetch(`${asaasUrl}/customers`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          access_token: asaasKey,
-        },
-        body: JSON.stringify(bodyCliente),
-      });
-
-      const clienteData = await responseCliente.json();
-
-      if (!responseCliente.ok) {
-        const detalheErro =
-          clienteData.errors?.[0]?.description ||
-          "Erro ao registrar cliente no Asaas.";
-        return NextResponse.json({ error: detalheErro }, { status: 400 });
-      }
-
-      customerId = clienteData.id;
-    }
-
-    // 2. Cria a cobrança via Pix vinculada ao customerId
-    const responseCobranca = await fetch(`${asaasUrl}/payments`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        access_token: asaasKey,
-      },
-      body: JSON.stringify({
-        customer: customerId,
-        billingType: "PIX",
-        value: Number(valor),
-        dueDate: new Date().toISOString().split("T")[0],
-        description: `RifaGO - Ponto #${ponto_id}`,
-        externalReference: String(ponto_id),
-      }),
-    });
-
-    const cobrancaData = await responseCobranca.json();
-
-    if (!responseCobranca.ok) {
-      const detalheErro =
-        cobrancaData.errors?.[0]?.description ||
-        "Erro ao criar a cobrança no Asaas.";
-      return NextResponse.json({ error: detalheErro }, { status: 400 });
-    }
-
-    // 3. Busca o QR Code e o código Pix Copia e Cola
-    const responsePixQrCode = await fetch(
-      `${asaasUrl}/payments/${cobrancaData.id}/pixQrCode`,
-      {
-        headers: {
-          access_token: asaasKey,
-        },
-      },
-    );
-
-    const pixData = await responsePixQrCode.json();
-
-    if (!responsePixQrCode.ok) {
-      const detalheErro =
-        pixData.errors?.[0]?.description || "Erro ao buscar QR Code do Pix.";
-      return NextResponse.json({ error: detalheErro }, { status: 400 });
-    }
 
     return NextResponse.json({
-      pagamento_id: cobrancaData.id,
-      pix_copia_cola: pixData.payload,
-      qr_code_base64: pixData.encodedImage,
-      expiracao: pixData.expirationDate,
+      pagamento_id: cobranca.pagamentoId,
+      pix_copia_cola: cobranca.pixCopiaECola,
+      qr_code_base64: cobranca.qrCodeBase64,
+      expiracao: cobranca.expiracao,
+      valor: VALOR_POR_PONTO * compra.numerosPontos.length,
+      total_pontos: compra.numerosPontos.length,
     });
-  } catch (error: unknown) {
-    const msg =
-      error instanceof Error
-        ? error.message
-        : "Erro interno ao processar o Pix.";
-    return NextResponse.json({ error: msg }, { status: 500 });
+  } catch (error) {
+    console.error("Erro ao gerar a cobrança Pix:", error);
+    const mensagem =
+      error instanceof Error ? error.message : "Erro interno no servidor.";
+    return NextResponse.json({ error: mensagem }, { status: 500 });
   }
 }
